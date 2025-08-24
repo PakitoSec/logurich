@@ -30,7 +30,6 @@ def test_rich(logger, buffer):
         "INFO",
         Pretty(generate_random_dict(5, 5), max_length=3, max_depth=3),
     )
-    print(buffer.getvalue())
     lines = buffer.getvalue().splitlines()
     for line in lines:
         assert re.match(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}.\d+ \| INFO", line)
