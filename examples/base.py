@@ -1,8 +1,20 @@
 from rich.panel import Panel
+from rich.table import Table
 
 from logurich import global_configure, init_logger, logger
 
 logger.info("This is a basic log message")
+
+
+def create_rich_table():
+    table = Table(title="Sample Table")
+    columns = [f"Column {i + 1}" for i in range(5)]
+    for col in columns:
+        table.add_column(col)
+    for row in range(10):
+        table.add_row(*[f"Row{row + 1}Col{col + 1}" for col in range(5)])
+    return table
+
 
 if __name__ == "__main__":
     logger.info("Example message")
@@ -43,7 +55,11 @@ if __name__ == "__main__":
     # Panel rich objet without prefix
     logger.rich(
         "INFO",
-        Panel("test 2", border_style="green"),
+        Panel("Rich Panel without prefix", border_style="green"),
         title="Rich Panel",
         prefix=False,
     )
+
+    t = create_rich_table()
+    logger.rich("INFO", t, title="test")
+    logger.rich("INFO", t, title="test", prefix=False)
