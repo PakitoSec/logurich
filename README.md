@@ -22,15 +22,15 @@ logger.info("This is a log message")
 # Use rich color and rich object formatting
 logger.info("[bold green]Rich formatted text[/bold green]")
 
-# Panel rich objet with logger and prefix
+# Panel rich object with logger and prefix
 logger.rich(
     "INFO", Panel("Rich Panel", border_style="green"), title="Rich Panel Object"
 )
 
-# Panel rich objet without prefix
+# Panel rich object without prefix
 logger.rich(
     "INFO",
-    Panel("test 2", border_style="green"),
+    Panel("Rich Panel without prefix", border_style="green"),
     title="Rich Panel",
     prefix=False,
 )

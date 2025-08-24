@@ -19,19 +19,15 @@ def rich_to_str(*objects, ansi: bool = True, **kwargs) -> str:
     return str(Text.from_ansi(capture.get()))
 
 
-def rich_format_grid(prefix: Text, data: Any, real_width: int) -> Table:
+def rich_format_grid(prefix: Text, data: ConsoleRenderable, real_width: int) -> Table:
     grid = Table.grid()
     grid.add_column()
     grid.add_column()
     content = Text.from_ansi(rich_to_str(data, width=real_width, end=""))
     lines = content.split()
-    mpp = Text()
-    for i in range(len(lines)):
-        line = prefix.copy()
-        if i != len(lines) - 1:
-            line += "\n"
-        mpp.append_text(line)
-    grid.add_row(mpp, data)
+    for line in lines:
+        pline = prefix.copy()
+        grid.add_row(pline, line)
     return grid
 
 
@@ -40,8 +36,8 @@ def rich_console_renderer(
 ) -> list[ConsoleRenderable]:
     console = get_console()
     rich_prefix = prefix[:-2] + "# "
-    real_width = console.width - len(rich_prefix)
     pp = Text.from_markup(rich_prefix)
+    real_width = console.width - len(pp)
     renderable = []
     for r in data:
         if rich_format:
