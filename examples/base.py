@@ -31,8 +31,11 @@ if __name__ == "__main__":
     logger.rich("INFO", "[bold blue]This is a rich formatted log message[/bold blue]")
 
     # Use context in logging
-    with global_configure(context__app="example"):
-        logger.debug("This log has app context")
+    with global_configure(context__y_app="example"):
+        logger.info("This log has app context")
+
+    with logger.contextualize(context_y__app="test"):
+        logger.info("ok")
 
     # Log with additional context
     logger.bind(context__y_qsd="demo").info("This log has module context")
