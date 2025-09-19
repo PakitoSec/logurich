@@ -2,12 +2,8 @@ from io import StringIO
 
 import pytest
 
-from logurich import (
-    init_logger,
-)
-from logurich import (
-    logger as _logger,
-)
+from logurich import init_logger
+from logurich import logger as _logger
 from logurich.console import configure_console
 
 

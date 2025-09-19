@@ -8,13 +8,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from logurich import (
-    global_configure,
-    global_set_context,
-    init_logger,
-    logger,
-    mp_configure,
-)
+from logurich import ctx, global_configure, global_set_context, init_logger, logger, mp_configure
 
 
 # Simulate some data to process
@@ -44,7 +38,7 @@ def process_item(item):
     mp_configure(logger)
 
     # Set context variables for this item
-    global_set_context(item_id=str(item["id"]))
+    global_set_context(item=ctx(str(item["id"]), label="item", style="cyan"))
 
     try:
         # Log the start of processing
@@ -108,7 +102,7 @@ def init_worker():
 
     # Add process-specific context
     pid = os.getpid()
-    global_set_context(context_m_b=f"Worker-{pid}")
+    global_set_context(worker=ctx(f"Worker-{pid}", style="magenta", show_key=True))
 
     logger.info(f"Worker process {pid} initialized")
 
@@ -117,7 +111,7 @@ def main():
     # Initialize the logger with rich handler
     init_logger("INFO", log_verbose=2, rich_handler=False)
 
-    with global_configure(context_m_g="DataProcessor"):
+    with global_configure(group=ctx("DataProcessor", style="green", show_key=True)):
         logger.rich(
             "INFO",
             Panel("Starting parallel data processing example", border_style="blue"),

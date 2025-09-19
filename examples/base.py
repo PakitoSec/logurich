@@ -1,7 +1,7 @@
 from rich.panel import Panel
 from rich.table import Table
 
-from logurich import global_configure, init_logger, logger
+from logurich import ctx, global_configure, init_logger, logger
 
 logger.info("This is a basic log message")
 
@@ -31,14 +31,16 @@ if __name__ == "__main__":
     logger.rich("INFO", "[bold blue]This is a rich formatted log message[/bold blue]")
 
     # Use context in logging
-    with global_configure(context__y_app="example"):
+    with global_configure(app=ctx("example", style="yellow")):
         logger.info("This log has app context")
 
-    with logger.contextualize(context_y__app="test"):
+    with logger.contextualize(user=ctx("test", style="cyan", show_key=True)):
         logger.info("ok")
 
     # Log with additional context
-    logger.bind(context__y_qsd="demo").info("This log has module context")
+    logger.bind(environment=ctx("demo", style="yellow")).info(
+        "This log has module context"
+    )
 
     # Log an exception
     try:

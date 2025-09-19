@@ -4,6 +4,7 @@ import pytest
 from rich.panel import Panel
 from rich.table import Table
 
+from logurich import ctx
 from logurich.core import global_configure, mp_configure
 
 
@@ -55,12 +56,12 @@ def test_mp_configure(logger, buffer):
     indirect=True,
 )
 def test_global_configure_in_mp(logger, buffer):
-    with global_configure(context__worker="TestWorker"):
+    with global_configure(worker=ctx("TestWorker")):
         process = mp.Process(target=worker_with_context, args=(logger,))
         process.start()
         process.join()
     logger.complete()
-    assert "TestWorker" not in buffer.getvalue()
+    assert "TestWorker" in buffer.getvalue()
 
 
 @pytest.mark.parametrize(

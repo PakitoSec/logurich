@@ -1,6 +1,6 @@
 import pytest
 
-from logurich.core import global_configure, global_set_context
+from logurich import ctx, global_configure, global_set_context
 
 
 @pytest.mark.parametrize(
@@ -51,7 +51,7 @@ def test_level_debug_verbose(logger, buffer):
     indirect=True,
 )
 def test_global_configure(logger, buffer):
-    with global_configure(context__y_exec_id="id_123"):
+    with global_configure(exec_id=ctx("id_123", style="yellow")):
         logger.info("Hello, world!")
         logger.debug("Debug, world!")
         logger.complete()
@@ -64,8 +64,9 @@ def test_global_configure(logger, buffer):
     indirect=True,
 )
 def test_set_context(logger, buffer):
-    global_set_context(context__y_exec_id="id_123")
+    global_set_context(exec_id=ctx("id_123", style="yellow"))
     logger.info("Hello, world!")
     logger.debug("Debug, world!")
     logger.complete()
     assert all("id_123" in log for log in buffer.getvalue().splitlines())
+    global_set_context(exec_id=None)

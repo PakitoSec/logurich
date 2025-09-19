@@ -6,15 +6,16 @@ import logging
 import os
 import sys
 import time
+from dataclasses import dataclass
 from functools import partialmethod
-from typing import Literal, Union
+from typing import Any, Literal, Union
 
 from loguru import logger as loguru_logger
 from rich.console import ConsoleRenderable
 from rich.text import Text
 from rich.traceback import Traceback
 
-from .conf import extra_logger
+from .struct import extra_logger
 from .console import rich_console_renderer, rich_to_str
 from .handler import CustomHandler, CustomRichHandler
 
@@ -33,6 +34,97 @@ def rich_logger(
 
 
 loguru_logger.__class__.rich = partialmethod(rich_logger)
+
+
+COLOR_ALIASES = {
+    "g": "green",
+    "e": "blue",
+    "c": "cyan",
+    "m": "magenta",
+    "r": "red",
+    "w": "white",
+    "y": "yellow",
+    "b": "bold",
+    "u": "u",
+    "bg": " on ",
+}
+
+
+def _normalize_style(style: str | None) -> str | None:
+    if style is None:
+        return None
+    style = style.strip()
+    if not style:
+        return None
+    return COLOR_ALIASES.get(style, style)
+
+
+def _wrap_markup(style: str | None, text: str) -> str:
+    normalized = _normalize_style(style)
+    if not normalized:
+        return text
+    return f"[{normalized}]{text}[/{normalized}]"
+
+
+def _context_display_name(name: str) -> str:
+    if name.startswith("context::"):
+        return name.split("::", 1)[1]
+    return name
+
+
+@dataclass(frozen=True)
+class ContextValue:
+    value: Any
+    value_style: str | None = None
+    bracket_style: str | None = None
+    label: str | None = None
+    show_key: bool = False
+
+    def _label(self, key: str) -> str | None:
+        if self.label is not None:
+            return self.label
+        if self.show_key:
+            return key
+        return None
+
+    def render(self, key: str, *, is_rich_handler: bool) -> str:
+        label = self._label(key)
+        value_text = str(self.value)
+        value_text = _wrap_markup(self.value_style, value_text)
+        if label:
+            body = f"{label}={value_text}"
+        else:
+            body = value_text
+        if is_rich_handler:
+            return body
+        left = _wrap_markup(self.bracket_style, "[")
+        right = _wrap_markup(self.bracket_style, "]")
+        if not left:
+            left = "["
+        if not right:
+            right = "]"
+        return f"{left}{body}{right}"
+
+
+def ctx(
+    value: Any,
+    *,
+    style: str | None = None,
+    value_style: str | None = None,
+    bracket_style: str | None = None,
+    label: str | None = None,
+    show_key: bool | None = None,
+) -> ContextValue:
+    """Build a ContextValue helper for structured context logging."""
+
+    effective_value_style = value_style if value_style is not None else style
+    return ContextValue(
+        value=value,
+        value_style=effective_value_style,
+        bracket_style=bracket_style,
+        label=label,
+        show_key=bool(show_key) if show_key is not None else False,
+    )
 
 
 def _logger_add_ctx_timestamp(kwargs: dict, stack: bool = True):
@@ -81,15 +173,42 @@ def global_configure(**kwargs):
         global_set_context(**{k: None for k in kwargs})
 
 
+def _normalize_context_key(key: str) -> str:
+    if key.startswith("context::"):
+        return key
+    if key.startswith("context"):
+        raise ValueError(
+            "Legacy context keys using the 'context__' pattern are no longer supported."
+        )
+    return f"context::{key}"
+
+
+def _coerce_context_value(value: Any) -> ContextValue | None:
+    if value is None:
+        return None
+    if isinstance(value, ContextValue):
+        return value
+    return ContextValue(value=value)
+
+
 def global_set_context(**kwargs):
-    extra_logger.update(kwargs)
     for key, value in kwargs.items():
-        if value is None:
-            for ctx in extra_logger:
-                if ctx == key or ("#" in ctx and key in ctx):
-                    extra_logger.pop(ctx, None)
-                    break
-    _logger_add_ctx_timestamp(extra_logger, stack=False)
+        normalized_key = _normalize_context_key(key)
+        normalized_value = _coerce_context_value(value)
+
+        matching_keys = [
+            existing
+            for existing in list(extra_logger.keys())
+            if existing == normalized_key or existing.startswith(normalized_key + "#")
+        ]
+        for existing in matching_keys:
+            extra_logger.pop(existing, None)
+
+        if normalized_value is None:
+            continue
+
+        extra_logger[normalized_key] = normalized_value
+
     logger.configure(extra=extra_logger)
 
 
@@ -167,19 +286,6 @@ class Formatter:
         "ERROR": "bold red",
         "CRITICAL": "bold white on red",
     }
-    MAP_LOGURU_RICH_COLORS = {
-        "g": "green",
-        "e": "blue",
-        "c": "cyan",
-        "m": "magenta",
-        "r": "red",
-        "w": "white",
-        "y": "yellow",
-        "b": "bold",
-        "u": "u",
-        "bg": " on ",
-    }
-
     def __init__(self, log_level, verbose: int, is_rich_handler: bool = False):
         self.serialize = os.environ.get("LOGURU_SERIALIZE")
         self.is_rich_handler = is_rich_handler
@@ -199,34 +305,15 @@ class Formatter:
                 self.extra_from_envs[key] = value
 
     @staticmethod
-    def build_markup_text(color: str, text: str):
-        to_c = Formatter.MAP_LOGURU_RICH_COLORS.get(color, "")
-        result = f"[{to_c}]{text}[/{to_c}]"
-        return result
-
-    @staticmethod
     def build_context(record: dict, is_rich_handler: bool = False) -> list[str]:
         extra_exist = []
         for name, value in record["extra"].items():
-            if name.startswith("context") is False:
+            if not isinstance(value, ContextValue):
                 continue
-            brace = "" if is_rich_handler else "["
-            rbrace = "" if is_rich_handler else "]"
-            # handle a context extra value
-            splitted = name.split("_")
-            if splitted and len(splitted) >= 2:
-                # syntax is 'context_x_y'
-                color = splitted[1]
-                if color:
-                    # handle x
-                    brace = Formatter.build_markup_text(color, brace)
-                    rbrace = Formatter.build_markup_text(color, rbrace)
-                if splitted and len(splitted) >= 3:
-                    # handle y
-                    color = splitted[2]
-                    if color:
-                        value = Formatter.build_markup_text(color, value)
-            extra_exist.append(f"{brace}{value}{rbrace}")
+            display_name = _context_display_name(name)
+            extra_exist.append(
+                value.render(display_name, is_rich_handler=is_rich_handler)
+            )
         return extra_exist
 
     def add_rich_tb(self, record: dict):

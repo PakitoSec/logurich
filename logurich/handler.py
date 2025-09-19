@@ -10,7 +10,7 @@ from rich.pretty import Pretty
 from rich.table import Table
 from rich.text import Text
 
-from .conf import extra_logger
+from .struct import extra_logger
 
 from .console import rich_console_renderer, get_console
 
