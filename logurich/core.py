@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 import contextlib
-import functools
 import logging
 import os
 import sys
 import time
 from dataclasses import dataclass
-from functools import partialmethod
+from functools import partialmethod, wraps
 from typing import Any, Literal, Union
 
-from loguru import logger as loguru_logger
+from loguru import logger as _logger
+from loguru._logger import Logger as _Logger
 from rich.console import ConsoleRenderable
 from rich.text import Text
 from rich.traceback import Traceback
@@ -21,7 +21,7 @@ from .struct import extra_logger
 
 
 def rich_logger(
-    self,
+    self: _Logger,
     log_level: str,
     *renderables: Union[ConsoleRenderable, str],
     title: str = "",
@@ -33,7 +33,8 @@ def rich_logger(
     )
 
 
-loguru_logger.__class__.rich = partialmethod(rich_logger)
+_Logger.rich = partialmethod(rich_logger)
+logger = _logger
 
 
 COLOR_ALIASES = {
@@ -212,14 +213,11 @@ def global_set_context(**kwargs):
     logger.configure(extra=extra_logger)
 
 
-logger = loguru_logger
-
-
 def logger_wraps(*, entry=True, exit=True, level="DEBUG"):
     def wrapper(func):
         name = func.__name__
 
-        @functools.wraps(func)
+        @wraps(func)
         def wrapped(*args, **kwargs):
             logger_ = logger.opt(depth=1)
             if entry:
