@@ -1,6 +1,8 @@
+import json
+
 import pytest
 
-from logurich import ctx, global_configure, global_set_context
+from logurich import ctx, global_configure, global_set_context, init_logger
 
 
 @pytest.mark.parametrize(
@@ -70,3 +72,21 @@ def test_set_context(logger, buffer):
     logger.complete()
     assert all("id_123" in log for log in buffer.getvalue().splitlines())
     global_set_context(exec_id=None)
+
+
+@pytest.mark.parametrize(
+    "level, enqueue",
+    [
+        ("DEBUG", False),
+        ("DEBUG", True),
+    ],
+)
+def test_loguru_serialize_env(monkeypatch, logger, level, enqueue, buffer):
+    monkeypatch.setenv("LOGURU_SERIALIZE", "1")
+    init_logger(level, enqueue=enqueue)
+    logger.info("Serialized {}", "output")
+    logger.complete()
+    log_lines = [line for line in buffer.getvalue().splitlines() if line.strip()]
+    assert log_lines, "No serialized output captured"
+    payload = json.loads(log_lines[0])
+    assert payload["record"]["message"] == "Serialized output"

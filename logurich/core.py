@@ -15,9 +15,9 @@ from rich.console import ConsoleRenderable
 from rich.text import Text
 from rich.traceback import Traceback
 
-from .struct import extra_logger
 from .console import rich_console_renderer, rich_to_str
 from .handler import CustomHandler, CustomRichHandler
+from .struct import extra_logger
 
 
 def rich_logger(
@@ -286,6 +286,7 @@ class Formatter:
         "ERROR": "bold red",
         "CRITICAL": "bold white on red",
     }
+
     def __init__(self, log_level, verbose: int, is_rich_handler: bool = False):
         self.serialize = os.environ.get("LOGURU_SERIALIZE")
         self.is_rich_handler = is_rich_handler
@@ -568,32 +569,26 @@ def init_logger(
         }
     )
     logger.configure(extra=extra_logger, patcher=logger_patch)
+    # Create appropriate handler based on rich_handler flag
     if rich_handler is True:
         handler = CustomRichHandler(
             rich_tracebacks=True,
             markup=True,
             tracebacks_show_locals=True,
         )
-        logger.add(
-            handler,
-            level=0,
-            format=formatter.format,
-            filter=filter_records,
-            enqueue=enqueue,
-            diagnose=diagnose,
-            colorize=False,
-        )
     else:
         handler = CustomHandler()
-        logger.add(
-            handler,
-            level=0,
-            format=formatter.format,
-            filter=filter_records,
-            enqueue=enqueue,
-            diagnose=diagnose,
-            colorize=False,
-        )
+    # Add handler with common configuration
+    logger.add(
+        handler,
+        level=0,
+        format=formatter.format,
+        filter=filter_records,
+        enqueue=enqueue,
+        diagnose=diagnose,
+        colorize=False,
+        serialize=os.environ.get("LOGURU_SERIALIZE"),
+    )
     log_path = None
     if log_filename is not None:
         log_path = os.path.join(log_folder, log_filename)
