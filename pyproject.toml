@@ -32,9 +32,10 @@ classifiers = [
 Homepage = "https://github.com/PakitoSec/logurich"
 Repository = "https://github.com/PakitoSec/logurich"
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
-    "pytest>=7.4.4",
+  "pytest>=8.3",
+  "ruff",
 ]
 
 [tool.setuptools]

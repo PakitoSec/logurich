@@ -22,7 +22,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install deps
-        run: uv sync --dev
+        run: uv sync --group dev
       - name: Run tests
         run: uv run -m pytest -q
 
