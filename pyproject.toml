@@ -5,7 +5,8 @@ description = "A Python library combining Loguru and Rich for beautiful logging.
 authors = [
     { name = "PakitoSec", email = "jeromep83@gmail.com" }
 ]
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICENSE"]
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
@@ -23,7 +24,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.13",
     "Operating System :: OS Independent",
 ]
 
@@ -31,11 +32,17 @@ classifiers = [
 Homepage = "https://github.com/PakitoSec/logurich"
 Repository = "https://github.com/PakitoSec/logurich"
 
-[build-system]
-requires = ["uv", "setuptools", "wheel"]
-build-backend = "setuptools.build_meta"
-
 [project.optional-dependencies]
 dev = [
     "pytest>=7.4.4",
 ]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+"logurich" = ["py.typed", "*.pyi"]
+
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"

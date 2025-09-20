@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import ContextManager, Final, Literal, Mapping, Protocol
 
 from .core import ContextValue, LoguRich
+from rich.console import Console
 
 LogLevel = Literal["TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL"]
 LevelByModuleValue = str | int | bool
@@ -16,6 +17,7 @@ ContextBinding = ContextValue | _SupportsStr | None
 __version__: Final[str]
 
 logger: LoguRich
+console: Console
 
 def ctx(
     value: object,
@@ -41,5 +43,9 @@ def init_logger(
 def mp_configure(logger_: LoguRich) -> None: ...
 def global_configure(**kwargs: ContextBinding) -> ContextManager[None]: ...
 def global_set_context(**kwargs: ContextBinding) -> None: ...
+def configure_console(*args: object, **kwargs: object) -> Console: ...
+def get_console() -> Console: ...
+def set_console(console: Console) -> None: ...
+def rich_to_str(*objects: object, ansi: bool = True, **kwargs: object) -> str: ...
 
 __all__: Final[list[str]]
