@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import ContextManager, Final, Literal, Mapping, Protocol
+from typing import ContextManager, Final, Mapping, Protocol
 
-from .core import ContextValue, LoguRich
 from rich.console import Console
 
-LogLevel = Literal["TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL"]
+from .core import ContextValue, LogLevel, LoguRich
+
 LevelByModuleValue = str | int | bool
 LevelByModuleMapping = Mapping[str | None, LevelByModuleValue]
 
@@ -18,6 +18,7 @@ __version__: Final[str]
 
 logger: LoguRich
 console: Console
+LOG_LEVEL_CHOICES: Final[tuple[str, ...]]
 
 def ctx(
     value: object,
