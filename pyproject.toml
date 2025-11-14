@@ -31,8 +31,14 @@ classifiers = [
 Homepage = "https://github.com/PakitoSec/logurich"
 Repository = "https://github.com/PakitoSec/logurich"
 
+[project.optional-dependencies]
+click = [
+    "click>=8.1.8",
+]
+
 [dependency-groups]
 dev = [
+  "pre-commit>=4.3.0",
   "pytest>=8.3",
   "ruff",
 ]

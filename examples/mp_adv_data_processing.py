@@ -8,7 +8,14 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from logurich import ctx, global_configure, global_set_context, init_logger, logger, mp_configure
+from logurich import (
+    ctx,
+    global_configure,
+    global_set_context,
+    init_logger,
+    logger,
+    mp_configure,
+)
 
 
 # Simulate some data to process

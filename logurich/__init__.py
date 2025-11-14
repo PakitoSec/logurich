@@ -8,6 +8,7 @@ from .core import (
     global_set_context,
     init_logger,
     logger,
+    LOG_LEVEL_CHOICES,
     mp_configure,
 )
 
@@ -22,6 +23,7 @@ __all__ = [
     "ContextValue",
     "ctx",
     "console",
+    "LOG_LEVEL_CHOICES",
     "configure_console",
     "get_console",
     "set_console",

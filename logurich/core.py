@@ -7,7 +7,7 @@ import sys
 import time
 from dataclasses import dataclass
 from functools import partialmethod, wraps
-from typing import Any, Literal, Union
+from typing import Any, Literal, Union, get_args
 
 from loguru import logger as _logger
 from loguru._logger import Logger as _Logger
@@ -498,10 +498,20 @@ def mp_configure(logger_):
     reinstall_loguru(logger, logger_)
 
 
+LogLevel = Literal[
+    "TRACE",
+    "DEBUG",
+    "INFO",
+    "SUCCESS",
+    "WARNING",
+    "ERROR",
+    "CRITICAL",
+]
+LOG_LEVEL_CHOICES: tuple[str, ...] = get_args(LogLevel)
+
+
 def init_logger(
-    log_level: Literal[
-        "TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL"
-    ],
+    log_level: LogLevel,
     log_verbose: int = 0,
     log_filename: str = None,
     log_folder="logs",
