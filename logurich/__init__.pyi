@@ -17,7 +17,6 @@ ContextBinding = ContextValue | _SupportsStr | None
 __version__: Final[str]
 
 logger: LoguRich
-console: Console
 LOG_LEVEL_CHOICES: Final[tuple[str, ...]]
 
 def ctx(
