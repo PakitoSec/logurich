@@ -1,6 +1,6 @@
 __version__ = "0.2.0"
 
-from .console import console, configure_console, get_console, rich_to_str, set_console
+from .console import configure_console, get_console, rich_to_str, set_console
 from .core import (
     ContextValue,
     ctx,
@@ -22,7 +22,6 @@ __all__ = [
     "global_set_context",
     "ContextValue",
     "ctx",
-    "console",
     "LOG_LEVEL_CHOICES",
     "configure_console",
     "get_console",

@@ -15,10 +15,8 @@ pip install logurich[click]
 
 ## Usage
 
-Logurich now supports direct imports from the package root, making it easier to access the logger and console:
-
 ```python
-from logurich import logger, console
+from logurich import logger
 
 # Use the logger
 logger.info("This is a log message")

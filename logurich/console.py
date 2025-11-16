@@ -91,6 +91,3 @@ def configure_console(*args: Any, **kwargs: Any) -> Console:
     _console = get_console()
     _console.__dict__ = new_console.__dict__
     return _console
-
-
-console = get_console()
