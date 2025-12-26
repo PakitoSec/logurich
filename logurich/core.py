@@ -12,6 +12,7 @@ from typing import Any, Literal, Union, get_args
 from loguru import logger as _logger
 from loguru._logger import Logger as _Logger
 from rich.console import ConsoleRenderable
+from rich.markup import escape
 from rich.text import Text
 from rich.traceback import Traceback
 
@@ -90,19 +91,19 @@ class ContextValue:
 
     def render(self, key: str, *, is_rich_handler: bool) -> str:
         label = self._label(key)
-        value_text = str(self.value)
+        value_text = escape(str(self.value))
         value_text = _wrap_markup(self.value_style, value_text)
         if label:
-            body = f"{label}={value_text}"
+            body = f"{escape(label)}={value_text}"
         else:
             body = value_text
         if is_rich_handler:
             return body
-        left = _wrap_markup(self.bracket_style, "[")
-        right = _wrap_markup(self.bracket_style, "]")
-        if not left:
-            left = "["
-        if not right:
+        if _normalize_style(self.bracket_style):
+            left = _wrap_markup(self.bracket_style, "[")
+            right = _wrap_markup(self.bracket_style, "]")
+        else:
+            left = r"\["
             right = "]"
         return f"{left}{body}{right}"
 

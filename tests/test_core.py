@@ -65,6 +65,19 @@ def test_global_configure(logger, buffer):
     [{"level": "DEBUG", "enqueue": False}, {"level": "DEBUG", "enqueue": True}],
     indirect=True,
 )
+def test_with_configure(logger, buffer):
+    with logger.contextualize(exec_id=ctx("task-id", style="yellow")):
+        logger.info("Hello, world!")
+        logger.debug("Debug, world!")
+    logger.complete()
+    assert all("task-id" in log for log in buffer.getvalue().splitlines())
+
+
+@pytest.mark.parametrize(
+    "logger",
+    [{"level": "DEBUG", "enqueue": False}, {"level": "DEBUG", "enqueue": True}],
+    indirect=True,
+)
 def test_set_context(logger, buffer):
     global_set_context(exec_id=ctx("id_123", style="yellow"))
     logger.info("Hello, world!")

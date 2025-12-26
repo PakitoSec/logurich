@@ -22,6 +22,14 @@ def worker_with_context(logger_):
     logger.info("Message with worker context")
 
 
+def worker_process_context(logger_):
+    from logurich import logger
+
+    mp_configure(logger_)
+    with logger.contextualize(task_id=ctx("task-id")):
+        logger.info("Message with context")
+
+
 def worker_with_rich_logging(logger_):
     from logurich.core import logger
 
@@ -48,6 +56,19 @@ def test_mp_configure(logger, buffer):
         "Test message from child process" in log
         for log in buffer.getvalue().splitlines()
     )
+
+
+@pytest.mark.parametrize(
+    "logger",
+    [{"level": "DEBUG", "enqueue": True}],
+    indirect=True,
+)
+def test_mp_configure_context(logger, buffer):
+    process = mp.Process(target=worker_process_context, args=(logger,))
+    process.start()
+    process.join()
+    logger.complete()
+    assert any("task-id" in log for log in buffer.getvalue().splitlines())
 
 
 @pytest.mark.parametrize(
