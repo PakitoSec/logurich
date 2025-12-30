@@ -386,11 +386,34 @@ _Logger.ctx = staticmethod(ctx)
 
 @contextlib.contextmanager
 def global_configure(**kwargs):
+    previous = {}
+    for key in kwargs:
+        normalized_key = _normalize_context_key(key)
+        matching_keys = [
+            existing
+            for existing in list(extra_logger.keys())
+            if existing == normalized_key or existing.startswith(normalized_key + "#")
+        ]
+        for existing in matching_keys:
+            if existing not in previous:
+                previous[existing] = extra_logger[existing]
     global_set_context(**kwargs)
     try:
         yield
     finally:
-        global_set_context(**dict.fromkeys(kwargs))
+        for key in kwargs:
+            normalized_key = _normalize_context_key(key)
+            matching_keys = [
+                existing
+                for existing in list(extra_logger.keys())
+                if existing == normalized_key
+                or existing.startswith(normalized_key + "#")
+            ]
+            for existing in matching_keys:
+                extra_logger.pop(existing, None)
+        if previous:
+            extra_logger.update(previous)
+        logger.configure(extra=extra_logger)
 
 
 def global_set_context(**kwargs):
@@ -468,7 +491,7 @@ def init_logger(
     highlight: bool = False,
     rotation: str | int | None = "12:00",
     retention: str | int | None = "10 days",
-) -> str:
+) -> str | None:
     """Initialize and configure the logger with rich formatting and customized handlers.
 
     This function sets up a logging system using Loguru with optional Rich integration.
@@ -503,7 +526,7 @@ def init_logger(
             Defaults to "10 days".
 
     Returns:
-        str: The absolute path to the log file if file logging is enabled, None otherwise.
+        str | None: The absolute path to the log file if file logging is enabled, None otherwise.
 
     Example:
         >>> init_logger("INFO", log_verbose=2, log_filename="app.log")

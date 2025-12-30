@@ -74,6 +74,30 @@ def test_global_configure(logger, buffer):
     [{"level": "DEBUG", "enqueue": False}, {"level": "DEBUG", "enqueue": True}],
     indirect=True,
 )
+def test_global_configure_restores_previous(logger, buffer):
+    with global_configure(exec_id=ctx("outer_ctx", style="yellow")):
+        logger.info("outer message")
+        with global_configure(exec_id=ctx("inner_ctx", style="cyan")):
+            logger.info("inner message")
+        logger.info("outer message again")
+    logger.info("plain message")
+    logger.complete()
+    log_lines = [line for line in buffer.getvalue().splitlines() if line.strip()]
+    assert "outer_ctx" in log_lines[0]
+    assert "inner_ctx" not in log_lines[0]
+    assert "inner_ctx" in log_lines[1]
+    assert "outer_ctx" not in log_lines[1]
+    assert "outer_ctx" in log_lines[2]
+    assert "inner_ctx" not in log_lines[2]
+    assert "outer_ctx" not in log_lines[3]
+    assert "inner_ctx" not in log_lines[3]
+
+
+@pytest.mark.parametrize(
+    "logger",
+    [{"level": "DEBUG", "enqueue": False}, {"level": "DEBUG", "enqueue": True}],
+    indirect=True,
+)
 def test_with_configure(logger, buffer):
     with logger.contextualize(exec_id=ctx("task-id", style="yellow")):
         logger.info("Hello, world!")

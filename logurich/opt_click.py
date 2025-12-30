@@ -60,6 +60,7 @@ def click_logger_params(func: F) -> F:
     Raises:
         RuntimeError: If logger parameters are missing from the function invocation.
     """
+
     @click.option(
         "-l",
         "--logger-level",
