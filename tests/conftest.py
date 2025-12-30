@@ -4,13 +4,13 @@ import pytest
 
 from logurich import init_logger
 from logurich import logger as _logger
-from logurich.console import configure_console
+from logurich.console import rich_configure_console
 
 
 @pytest.fixture
 def buffer():
     buffer = StringIO()
-    configure_console(file=buffer, width=120)
+    rich_configure_console(file=buffer, width=120)
     yield buffer
 
 

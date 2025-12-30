@@ -9,8 +9,8 @@ from logurich import (
     global_set_context,
     init_logger,
     logger,
-    restore_level,
-    set_level,
+    level_restore,
+    level_set,
 )
 
 
@@ -164,15 +164,15 @@ def test_logger_ctx_in_bind(logger, buffer):
     indirect=True,
 )
 def test_set_level_filters_messages(logger, buffer):
-    """set_level() should temporarily raise the minimum log level."""
-    logger.debug("before set_level")
-    set_level("WARNING")
+    """level_set() should temporarily raise the minimum log level."""
+    logger.debug("before level_set")
+    level_set("WARNING")
     logger.debug("should be filtered")
     logger.info("also filtered")
     logger.warning("should appear")
     logger.complete()
     output = buffer.getvalue()
-    assert "before set_level" in output
+    assert "before level_set" in output
     assert "should be filtered" not in output
     assert "also filtered" not in output
     assert "should appear" in output
@@ -184,10 +184,10 @@ def test_set_level_filters_messages(logger, buffer):
     indirect=True,
 )
 def test_restore_level_resets_filtering(logger, buffer):
-    """restore_level() should reset the log level to the original."""
-    set_level("ERROR")
+    """level_restore() should reset the log level to the original."""
+    level_set("ERROR")
     logger.warning("filtered warning")
-    restore_level()
+    level_restore()
     logger.debug("after restore")
     logger.complete()
     output = buffer.getvalue()

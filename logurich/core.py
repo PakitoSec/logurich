@@ -18,7 +18,8 @@ from rich.traceback import Traceback
 
 from .console import rich_console_renderer, rich_to_str
 from .handler import CustomHandler, CustomRichHandler
-from .struct import _parse_bool_env, extra_logger
+from .struct import extra_logger
+from .utils import parse_bool_env
 
 
 def _rich_logger(
@@ -175,7 +176,7 @@ class _Formatter:
     }
 
     def __init__(self, log_level, verbose: int, is_rich_handler: bool = False):
-        self.serialize = _parse_bool_env("LOGURU_SERIALIZE")
+        self.serialize = parse_bool_env("LOGURU_SERIALIZE")
         self.is_rich_handler = is_rich_handler
         if self.is_rich_handler is True:
             self._padding = 0
@@ -437,12 +438,12 @@ def global_set_context(**kwargs):
     logger.configure(extra=extra_logger)
 
 
-def set_level(level: str):
+def level_set(level: str):
     extra_logger.update({"__level_upper_only": level})
     logger.configure(extra=extra_logger)
 
 
-def restore_level():
+def level_restore():
     extra_logger.update({"__level_upper_only": None})
     logger.configure(extra=extra_logger)
 
@@ -534,7 +535,7 @@ def init_logger(
         >>> logger.debug("Debug information")  # Won't be displayed with INFO level
     """
     if rich_handler is False:
-        env_rich_handler = _parse_bool_env("LOGURU_RICH")
+        env_rich_handler = parse_bool_env("LOGURU_RICH")
         if env_rich_handler is not None:
             rich_handler = env_rich_handler
     logging.basicConfig(handlers=[_InterceptHandler()], level=0, force=True)
@@ -565,7 +566,7 @@ def init_logger(
     else:
         handler = CustomHandler()
     # Add handler with common configuration
-    serialize = bool(_parse_bool_env("LOGURU_SERIALIZE"))
+    serialize = bool(parse_bool_env("LOGURU_SERIALIZE"))
     logger.add(
         handler,
         level=0,
