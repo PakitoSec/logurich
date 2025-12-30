@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from logging import Handler, LogRecord
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, Union
 
 from rich.console import ConsoleRenderable
 from rich.highlighter import ReprHighlighter
@@ -65,7 +65,7 @@ class CustomRichHandler(RichHandler):
         Returns:
             A Rich Table grid with context prefix and message content
         """
-        row: list[str | RenderableType] = []
+        row: list[Union[str, RenderableType]] = []
         list_context: list[str] = record.extra.get("_build_list_context", [])
         grid = Table.grid(expand=True)
         if list_context:
@@ -143,7 +143,7 @@ class CustomHandler(Handler):
     def __init__(self, *args: object, **kwargs: object) -> None:
         super().__init__(*args, **kwargs)
         self.highlighter = ReprHighlighter()
-        self.serialize: bool | None = parse_bool_env("LOGURU_SERIALIZE")
+        self.serialize: Optional[bool] = parse_bool_env("LOGURU_SERIALIZE")
         self._console: Console = rich_get_console()
 
     def _should_highlight(self, record: LogRecord) -> bool:

@@ -1,26 +1,26 @@
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any, Literal, Optional, Union
 
 from loguru._logger import Logger as _Logger
 from rich.console import ConsoleRenderable
 
 class ContextValue:
     value: Any
-    value_style: str | None
-    bracket_style: str | None
-    label: str | None
+    value_style: Optional[str]
+    bracket_style: Optional[str]
+    label: Optional[str]
     show_key: bool
 
     def __init__(
         self,
         value: Any,
-        value_style: str | None = ...,
-        bracket_style: str | None = ...,
-        label: str | None = ...,
+        value_style: Optional[str] = ...,
+        bracket_style: Optional[str] = ...,
+        label: Optional[str] = ...,
         show_key: bool = ...,
     ) -> None: ...
-    def _label(self, key: str) -> str | None: ...
+    def _label(self, key: str) -> Optional[str]: ...
     def render(self, key: str, *, is_rich_handler: bool) -> str: ...
 
 class LoguRich(_Logger):
@@ -28,11 +28,11 @@ class LoguRich(_Logger):
     def ctx(
         value: Any,
         *,
-        style: str | None = None,
-        value_style: str | None = None,
-        bracket_style: str | None = None,
-        label: str | None = None,
-        show_key: bool | None = None,
+        style: Optional[str] = None,
+        value_style: Optional[str] = None,
+        bracket_style: Optional[str] = None,
+        label: Optional[str] = None,
+        show_key: Optional[bool] = None,
     ) -> ContextValue: ...
     @staticmethod
     def level_set(level: LogLevel) -> None: ...
@@ -43,7 +43,7 @@ class LoguRich(_Logger):
     def rich(
         self,
         log_level: str,
-        *renderables: ConsoleRenderable | str,
+        *renderables: Union[ConsoleRenderable, str],
         title: str = "",
         prefix: bool = True,
         end: str = "\n",

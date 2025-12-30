@@ -9,7 +9,7 @@ import sys
 from dataclasses import dataclass
 from functools import partialmethod
 from pathlib import Path
-from typing import Any, Literal, get_args
+from typing import Any, Literal, Optional, Union, get_args
 
 from loguru import logger as _logger
 from loguru._logger import Logger as _Logger
@@ -27,7 +27,7 @@ from .utils import parse_bool_env
 def _rich_logger(
     self: _Logger,
     log_level: str,
-    *renderables: ConsoleRenderable | str,
+    *renderables: Union[ConsoleRenderable, str],
     title: str = "",
     prefix: bool = True,
     end: str = "\n",
@@ -56,7 +56,7 @@ COLOR_ALIASES = {
 }
 
 
-def _normalize_style(style: str | None) -> str | None:
+def _normalize_style(style: Optional[str]) -> Optional[str]:
     if style is None:
         return None
     style = style.strip()
@@ -65,7 +65,7 @@ def _normalize_style(style: str | None) -> str | None:
     return COLOR_ALIASES.get(style, style)
 
 
-def _wrap_markup(style: str | None, text: str) -> str:
+def _wrap_markup(style: Optional[str], text: str) -> str:
     normalized = _normalize_style(style)
     if not normalized:
         return text
@@ -81,12 +81,12 @@ def _context_display_name(name: str) -> str:
 @dataclass(frozen=True)
 class ContextValue:
     value: Any
-    value_style: str | None = None
-    bracket_style: str | None = None
-    label: str | None = None
+    value_style: Optional[str] = None
+    bracket_style: Optional[str] = None
+    label: Optional[str] = None
     show_key: bool = False
 
-    def _label(self, key: str) -> str | None:
+    def _label(self, key: str) -> Optional[str]:
         if self.label is not None:
             return self.label
         if self.show_key:
@@ -115,7 +115,7 @@ def _normalize_context_key(key: str) -> str:
     return f"context::{key}"
 
 
-def _coerce_context_value(value: Any) -> ContextValue | None:
+def _coerce_context_value(value: Any) -> Optional[ContextValue]:
     if value is None:
         return None
     if isinstance(value, ContextValue):
@@ -363,11 +363,11 @@ LOG_LEVEL_CHOICES: tuple[str, ...] = get_args(LogLevel)
 def ctx(
     value: Any,
     *,
-    style: str | None = None,
-    value_style: str | None = None,
-    bracket_style: str | None = None,
-    label: str | None = None,
-    show_key: bool | None = None,
+    style: Optional[str] = None,
+    value_style: Optional[str] = None,
+    bracket_style: Optional[str] = None,
+    label: Optional[str] = None,
+    show_key: Optional[bool] = None,
 ) -> ContextValue:
     """Build a ContextValue helper for structured context logging."""
 
@@ -489,16 +489,16 @@ _Logger.configure_child_logger = staticmethod(configure_child_logger)
 def init_logger(
     log_level: LogLevel,
     log_verbose: int = 0,
-    log_filename: str | None = None,
+    log_filename: Optional[str] = None,
     log_folder: str = "logs",
     level_by_module=None,
     rich_handler: bool = False,
     diagnose: bool = False,
     enqueue: bool = True,
     highlight: bool = False,
-    rotation: str | int | None = "12:00",
-    retention: str | int | None = "10 days",
-) -> str | None:
+    rotation: Optional[Union[str, int]] = "12:00",
+    retention: Optional[Union[str, int]] = "10 days",
+) -> Optional[str]:
     """Initialize and configure the logger with rich formatting and customized handlers.
 
     This function sets up a logging system using Loguru with optional Rich integration.
@@ -525,15 +525,15 @@ def init_logger(
         enqueue (bool, optional): Whether to use a queue for thread-safe logging.
             Defaults to True.
         highlight (bool, optional): Whether to highlight log messages. Defaults to False.
-        rotation (str | int | None, optional): When to rotate log files. Can be a time string
+        rotation (str or int or None, optional): When to rotate log files. Can be a time string
             (e.g. "12:00", "1 week"), size (e.g. "500 MB"), or None to disable rotation.
             Defaults to "12:00".
-        retention (str | int | None, optional): How long to keep rotated log files. Can be a time
+        retention (str or int or None, optional): How long to keep rotated log files. Can be a time
             string (e.g. "10 days", "1 month"), count, or None to keep all files.
             Defaults to "10 days".
 
     Returns:
-        str | None: The absolute path to the log file if file logging is enabled, None otherwise.
+        str or None: The absolute path to the log file if file logging is enabled, None otherwise.
 
     Example:
         >>> init_logger("INFO", log_verbose=2, log_filename="app.log")

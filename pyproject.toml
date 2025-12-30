@@ -8,7 +8,7 @@ authors = [
 license = "MIT"
 license-files = ["LICENSE"]
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 keywords = [
     "logging",
     "loguru",
@@ -29,6 +29,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: System :: Logging",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -58,7 +59,13 @@ build-backend = "uv_build"
 
 [tool.ruff]
 line-length = 88
-target-version = "py310"
+target-version = "py39"
+
+[tool.ruff.lint.pyupgrade]
+keep-runtime-typing = true
+
+[tool.ruff.lint.per-file-ignores]
+"*.pyi" = ["UP007", "UP045"]
 
 [tool.ruff.lint]
 select = [
