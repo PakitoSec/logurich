@@ -2,7 +2,16 @@ import json
 
 import pytest
 
-from logurich import ctx, global_configure, global_set_context, init_logger
+from logurich import (
+    ContextValue,
+    ctx,
+    global_configure,
+    global_set_context,
+    init_logger,
+    logger,
+    restore_level,
+    set_level,
+)
 
 
 @pytest.mark.parametrize(
@@ -103,3 +112,60 @@ def test_loguru_serialize_env(monkeypatch, logger, level, enqueue, buffer):
     assert log_lines, "No serialized output captured"
     payload = json.loads(log_lines[0])
     assert payload["record"]["message"] == "Serialized output"
+
+
+def test_logger_ctx_returns_context_value():
+    """logger.ctx() should return a ContextValue identical to standalone ctx()."""
+    result = logger.ctx("value", style="cyan", label="lbl", show_key=True)
+    expected = ctx("value", style="cyan", label="lbl", show_key=True)
+    assert isinstance(result, ContextValue)
+    assert result == expected
+
+
+@pytest.mark.parametrize(
+    "logger",
+    [{"level": "DEBUG", "enqueue": False}],
+    indirect=True,
+)
+def test_logger_ctx_in_bind(logger, buffer):
+    """logger.ctx() should work seamlessly with logger.bind()."""
+    logger.bind(session=logger.ctx("sess-42", style="cyan")).info("bound message")
+    logger.complete()
+    assert "sess-42" in buffer.getvalue()
+
+
+@pytest.mark.parametrize(
+    "logger",
+    [{"level": "DEBUG", "enqueue": False}],
+    indirect=True,
+)
+def test_set_level_filters_messages(logger, buffer):
+    """set_level() should temporarily raise the minimum log level."""
+    logger.debug("before set_level")
+    set_level("WARNING")
+    logger.debug("should be filtered")
+    logger.info("also filtered")
+    logger.warning("should appear")
+    logger.complete()
+    output = buffer.getvalue()
+    assert "before set_level" in output
+    assert "should be filtered" not in output
+    assert "also filtered" not in output
+    assert "should appear" in output
+
+
+@pytest.mark.parametrize(
+    "logger",
+    [{"level": "DEBUG", "enqueue": False}],
+    indirect=True,
+)
+def test_restore_level_resets_filtering(logger, buffer):
+    """restore_level() should reset the log level to the original."""
+    set_level("ERROR")
+    logger.warning("filtered warning")
+    restore_level()
+    logger.debug("after restore")
+    logger.complete()
+    output = buffer.getvalue()
+    assert "filtered warning" not in output
+    assert "after restore" in output

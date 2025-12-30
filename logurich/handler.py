@@ -1,4 +1,3 @@
-import os
 from datetime import datetime
 from logging import Handler, LogRecord
 from pathlib import Path
@@ -10,9 +9,8 @@ from rich.pretty import Pretty
 from rich.table import Table
 from rich.text import Text
 
-from .struct import extra_logger
-
-from .console import rich_console_renderer, get_console
+from .console import get_console, rich_console_renderer
+from .struct import _parse_bool_env, extra_logger
 
 
 class CustomRichHandler(RichHandler):
@@ -75,7 +73,7 @@ class CustomHandler(Handler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.highlighter = ReprHighlighter()
-        self.serialize = os.environ.get("LOGURU_SERIALIZE")
+        self.serialize = _parse_bool_env("LOGURU_SERIALIZE")
 
     def emit(self, record):
         console = get_console()
@@ -88,7 +86,7 @@ class CustomHandler(Handler):
         rich_console = record.extra.get("rich_console")
         rich_format = record.extra.get("rich_format")
         rich_highlight = record.extra.get("rich_highlight")
-        conf_rich_highlight = extra_logger.get("conf_rich_highlight")
+        conf_rich_highlight = extra_logger.get("__rich_highlight")
         try:
             if record.msg:
                 p = Text.from_markup(prefix)

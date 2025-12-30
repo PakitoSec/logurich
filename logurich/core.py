@@ -4,10 +4,10 @@ import contextlib
 import logging
 import os
 import sys
-import time
 from dataclasses import dataclass
-from functools import partialmethod, wraps
-from typing import Any, Literal, Union, get_args
+from functools import partialmethod
+from pathlib import Path
+from typing import Any, Literal, get_args
 
 from loguru import logger as _logger
 from loguru._logger import Logger as _Logger
@@ -18,13 +18,13 @@ from rich.traceback import Traceback
 
 from .console import rich_console_renderer, rich_to_str
 from .handler import CustomHandler, CustomRichHandler
-from .struct import extra_logger
+from .struct import _parse_bool_env, extra_logger
 
 
-def rich_logger(
+def _rich_logger(
     self: _Logger,
     log_level: str,
-    *renderables: Union[ConsoleRenderable, str],
+    *renderables: ConsoleRenderable | str,
     title: str = "",
     prefix: bool = True,
     end: str = "\n",
@@ -34,7 +34,7 @@ def rich_logger(
     )
 
 
-_Logger.rich = partialmethod(rich_logger)
+_Logger.rich = partialmethod(_rich_logger)
 logger = _logger
 
 
@@ -93,10 +93,7 @@ class ContextValue:
         label = self._label(key)
         value_text = escape(str(self.value))
         value_text = _wrap_markup(self.value_style, value_text)
-        if label:
-            body = f"{escape(label)}={value_text}"
-        else:
-            body = value_text
+        body = f"{escape(label)}={value_text}" if label else value_text
         if is_rich_handler:
             return body
         if _normalize_style(self.bracket_style):
@@ -106,73 +103,6 @@ class ContextValue:
             left = r"\["
             right = "]"
         return f"{left}{body}{right}"
-
-
-def ctx(
-    value: Any,
-    *,
-    style: str | None = None,
-    value_style: str | None = None,
-    bracket_style: str | None = None,
-    label: str | None = None,
-    show_key: bool | None = None,
-) -> ContextValue:
-    """Build a ContextValue helper for structured context logging."""
-
-    effective_value_style = value_style if value_style is not None else style
-    return ContextValue(
-        value=value,
-        value_style=effective_value_style,
-        bracket_style=bracket_style,
-        label=label,
-        show_key=bool(show_key) if show_key is not None else False,
-    )
-
-
-def _logger_add_ctx_timestamp(kwargs: dict, stack: bool = True):
-    new_kwargs = {}
-    for k in list(kwargs.keys()):
-        if k.startswith("context") and stack is True and "#" not in k:
-            v = kwargs.pop(k)
-            new_k = k + "#" + str(time.time_ns())
-            new_kwargs[new_k] = v
-    kwargs.update(new_kwargs)
-
-
-def logger_patch(record):
-    context = {}
-    for name in record["extra"]:
-        if name.startswith("context") is False:
-            continue
-        splitted_name = name.split("#")
-        if len(splitted_name) == 2:
-            real_name, timer = splitted_name
-        else:
-            real_name, timer = name, 0
-        context[name] = real_name, float(timer)
-    sorted_context_name = sorted(context, key=lambda d: context[d][1])
-    for name in sorted_context_name:
-        value = record["extra"].pop(name)
-        real_name, _ = context[name]
-        record["extra"][real_name] = value
-
-
-def logger_bind(args, kwargs):
-    _logger_add_ctx_timestamp(kwargs, stack=False)
-
-
-def logger_ctx(args, kwargs):
-    _ = kwargs.get("stack", False)
-    _logger_add_ctx_timestamp(kwargs, stack=False)
-
-
-@contextlib.contextmanager
-def global_configure(**kwargs):
-    global_set_context(**kwargs)
-    try:
-        yield
-    finally:
-        global_set_context(**{k: None for k in kwargs})
 
 
 def _normalize_context_key(key: str) -> str:
@@ -193,49 +123,7 @@ def _coerce_context_value(value: Any) -> ContextValue | None:
     return ContextValue(value=value)
 
 
-def global_set_context(**kwargs):
-    for key, value in kwargs.items():
-        normalized_key = _normalize_context_key(key)
-        normalized_value = _coerce_context_value(value)
-
-        matching_keys = [
-            existing
-            for existing in list(extra_logger.keys())
-            if existing == normalized_key or existing.startswith(normalized_key + "#")
-        ]
-        for existing in matching_keys:
-            extra_logger.pop(existing, None)
-
-        if normalized_value is None:
-            continue
-
-        extra_logger[normalized_key] = normalized_value
-
-    logger.configure(extra=extra_logger)
-
-
-def logger_wraps(*, entry=True, exit=True, level="DEBUG"):
-    def wrapper(func):
-        name = func.__name__
-
-        @wraps(func)
-        def wrapped(*args, **kwargs):
-            logger_ = logger.opt(depth=1)
-            if entry:
-                logger_.log(
-                    level, "Entering '{}' (args={}, kwargs={})", name, args, kwargs
-                )
-            result = func(*args, **kwargs)
-            if exit:
-                logger_.log(level, "Exiting '{}' (result={})", name, result)
-            return result
-
-        return wrapped
-
-    return wrapper
-
-
-class InterceptHandler(logging.Handler):
+class _InterceptHandler(logging.Handler):
     def emit(self, record):
         # Get corresponding Loguru level if it exists.
         try:
@@ -254,7 +142,7 @@ class InterceptHandler(logging.Handler):
         )
 
 
-class Formatter:
+class _Formatter:
     ALL_PADDING_FMT = [
         (0, ""),
         (10, "{process.name}"),
@@ -287,14 +175,14 @@ class Formatter:
     }
 
     def __init__(self, log_level, verbose: int, is_rich_handler: bool = False):
-        self.serialize = os.environ.get("LOGURU_SERIALIZE")
+        self.serialize = _parse_bool_env("LOGURU_SERIALIZE")
         self.is_rich_handler = is_rich_handler
         if self.is_rich_handler is True:
             self._padding = 0
             self.fmt_format = "{process.name}.{name}:{line}"
-            self.prefix = Formatter.FMT_RICH
+            self.prefix = _Formatter.FMT_RICH
         else:
-            self._padding, self.fmt_format = Formatter.ALL_PADDING_FMT[verbose]
+            self._padding, self.fmt_format = _Formatter.ALL_PADDING_FMT[verbose]
             self.prefix = self.ALL_FMT[verbose]
         self.verbose = verbose
         self.log_level = log_level
@@ -341,13 +229,13 @@ class Formatter:
     def init_record(self, record: dict):
         length = len(self.fmt_format.format(**record))
         self._padding = min(max(self._padding, length), 50)
-        list_context = Formatter.build_context(
+        list_context = _Formatter.build_context(
             record, is_rich_handler=self.is_rich_handler
         )
         record["extra"]["_build_list_context"] = list_context
         record["extra"]["_padding"] = " " * (self._padding - length)
         record["extra"].update(self.extra_from_envs)
-        lvl_color = Formatter.LEVEL_COLOR_MAP.get(record["level"].name, "cyan")
+        lvl_color = _Formatter.LEVEL_COLOR_MAP.get(record["level"].name, "cyan")
         prefix = self.prefix.format(**record)
         prefix = prefix.replace("<level>", f"[{lvl_color}]")
         prefix = prefix.replace("</level>", f"[/{lvl_color}]")
@@ -384,17 +272,7 @@ class Formatter:
         return "{message}{exception}"
 
 
-def set_level(level: str):
-    extra_logger.update({"__level_upper_only": level})
-    logger.configure(extra=extra_logger)
-
-
-def restore_level():
-    extra_logger.update({"__level_upper_only": None})
-    logger.configure(extra=extra_logger)
-
-
-def filter_records(record):
+def _filter_records(record):
     min_level = record["extra"].get("__min_level")
     level_per_module = record["extra"].get("__level_per_module")
     if level_per_module:
@@ -420,7 +298,7 @@ def filter_records(record):
     return record["level"].no >= min_level
 
 
-def conf_level_by_module(conf: dict):
+def _conf_level_by_module(conf: dict):
     level_per_module = {}
     for module, level_ in conf.items():
         if module is not None and not isinstance(module, str):
@@ -456,27 +334,106 @@ def conf_level_by_module(conf: dict):
     return level_per_module
 
 
-class PropagateHandler(logging.Handler):
+class _PropagateHandler(logging.Handler):
     def emit(self, record):
         logging.getLogger(record.name).handle(record)
 
 
-def propagate_loguru_to_std_logger():
-    logger.remove()
-    logger.add(PropagateHandler(), format="{message}")
-
-
-def reinstall_loguru(from_logger, target_logger):
+def _reinstall_loguru(from_logger, target_logger):
     from_logger._core.__dict__ = target_logger._core.__dict__.copy()
     from_logger._options = target_logger._options
     extra_logger.update(target_logger._core.__dict__.get("extra", {}))
+
+
+LogLevel = Literal[
+    "TRACE",
+    "DEBUG",
+    "INFO",
+    "SUCCESS",
+    "WARNING",
+    "ERROR",
+    "CRITICAL",
+]
+LOG_LEVEL_CHOICES: tuple[str, ...] = get_args(LogLevel)
+
+
+# Public API Functions
+
+
+def ctx(
+    value: Any,
+    *,
+    style: str | None = None,
+    value_style: str | None = None,
+    bracket_style: str | None = None,
+    label: str | None = None,
+    show_key: bool | None = None,
+) -> ContextValue:
+    """Build a ContextValue helper for structured context logging."""
+
+    effective_value_style = value_style if value_style is not None else style
+    return ContextValue(
+        value=value,
+        value_style=effective_value_style,
+        bracket_style=bracket_style,
+        label=label,
+        show_key=bool(show_key) if show_key is not None else False,
+    )
+
+
+_Logger.ctx = staticmethod(ctx)
+
+
+@contextlib.contextmanager
+def global_configure(**kwargs):
+    global_set_context(**kwargs)
+    try:
+        yield
+    finally:
+        global_set_context(**dict.fromkeys(kwargs))
+
+
+def global_set_context(**kwargs):
+    for key, value in kwargs.items():
+        normalized_key = _normalize_context_key(key)
+        normalized_value = _coerce_context_value(value)
+
+        matching_keys = [
+            existing
+            for existing in list(extra_logger.keys())
+            if existing == normalized_key or existing.startswith(normalized_key + "#")
+        ]
+        for existing in matching_keys:
+            extra_logger.pop(existing, None)
+
+        if normalized_value is None:
+            continue
+
+        extra_logger[normalized_key] = normalized_value
+
+    logger.configure(extra=extra_logger)
+
+
+def set_level(level: str):
+    extra_logger.update({"__level_upper_only": level})
+    logger.configure(extra=extra_logger)
+
+
+def restore_level():
+    extra_logger.update({"__level_upper_only": None})
+    logger.configure(extra=extra_logger)
+
+
+def propagate_loguru_to_std_logger():
+    logger.remove()
+    logger.add(_PropagateHandler(), format="{message}")
 
 
 def mp_configure(logger_):
     """Configure a logger in a child process from a parent process logger.
 
     This function sets up the logger to work properly in multiprocessing contexts.
-    It configures the basic logging system to use Loguru's InterceptHandler and
+    It configures the basic logging system to use the internal intercept handler and
     reinstalls the logger with the configuration from the parent process.
 
     Args:
@@ -495,32 +452,22 @@ def mp_configure(logger_):
         >>> p = Process(target=worker, args=(logger,))
         >>> p.start()
     """
-    logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
-    reinstall_loguru(logger, logger_)
-
-
-LogLevel = Literal[
-    "TRACE",
-    "DEBUG",
-    "INFO",
-    "SUCCESS",
-    "WARNING",
-    "ERROR",
-    "CRITICAL",
-]
-LOG_LEVEL_CHOICES: tuple[str, ...] = get_args(LogLevel)
+    logging.basicConfig(handlers=[_InterceptHandler()], level=0, force=True)
+    _reinstall_loguru(logger, logger_)
 
 
 def init_logger(
     log_level: LogLevel,
     log_verbose: int = 0,
-    log_filename: str = None,
-    log_folder="logs",
+    log_filename: str | None = None,
+    log_folder: str = "logs",
     level_by_module=None,
     rich_handler: bool = False,
     diagnose: bool = False,
     enqueue: bool = True,
     highlight: bool = False,
+    rotation: str | int | None = "12:00",
+    retention: str | int | None = "10 days",
 ) -> str:
     """Initialize and configure the logger with rich formatting and customized handlers.
 
@@ -548,6 +495,12 @@ def init_logger(
         enqueue (bool, optional): Whether to use a queue for thread-safe logging.
             Defaults to True.
         highlight (bool, optional): Whether to highlight log messages. Defaults to False.
+        rotation (str | int | None, optional): When to rotate log files. Can be a time string
+            (e.g. "12:00", "1 week"), size (e.g. "500 MB"), or None to disable rotation.
+            Defaults to "12:00".
+        retention (str | int | None, optional): How long to keep rotated log files. Can be a time
+            string (e.g. "10 days", "1 month"), count, or None to keep all files.
+            Defaults to "10 days".
 
     Returns:
         str: The absolute path to the log file if file logging is enabled, None otherwise.
@@ -557,18 +510,19 @@ def init_logger(
         >>> logger.info("Application started")
         >>> logger.debug("Debug information")  # Won't be displayed with INFO level
     """
-    rich_handler = (
-        os.environ.get("LOGURU_RICH") if rich_handler is False else rich_handler
-    )
-    logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
+    if rich_handler is False:
+        env_rich_handler = _parse_bool_env("LOGURU_RICH")
+        if env_rich_handler is not None:
+            rich_handler = env_rich_handler
+    logging.basicConfig(handlers=[_InterceptHandler()], level=0, force=True)
     logger.remove()
     if log_verbose > 3:
         log_verbose = 3
     elif log_verbose < 0:
         log_verbose = 0
-    formatter = Formatter(log_level, log_verbose, is_rich_handler=rich_handler)
+    formatter = _Formatter(log_level, log_verbose, is_rich_handler=rich_handler)
     level_per_module = (
-        conf_level_by_module(level_by_module) if level_by_module else None
+        _conf_level_by_module(level_by_module) if level_by_module else None
     )
     extra_logger.update(
         {
@@ -577,7 +531,7 @@ def init_logger(
             "__rich_highlight": highlight,
         }
     )
-    logger.configure(extra=extra_logger, patcher=logger_patch)
+    logger.configure(extra=extra_logger)
     # Create appropriate handler based on rich_handler flag
     if rich_handler is True:
         handler = CustomRichHandler(
@@ -588,26 +542,29 @@ def init_logger(
     else:
         handler = CustomHandler()
     # Add handler with common configuration
+    serialize = bool(_parse_bool_env("LOGURU_SERIALIZE"))
     logger.add(
         handler,
         level=0,
         format=formatter.format,
-        filter=filter_records,
+        filter=_filter_records,
         enqueue=enqueue,
         diagnose=diagnose,
         colorize=False,
-        serialize=os.environ.get("LOGURU_SERIALIZE"),
+        serialize=serialize,
     )
     log_path = None
     if log_filename is not None:
-        log_path = os.path.join(log_folder, log_filename)
+        log_dir = Path(log_folder)
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_path = str(log_dir / log_filename)
         logger.add(
             log_path,
             level=0,
-            rotation="12:00",
-            retention="10 days",
+            rotation=rotation,
+            retention=retention,
             format=formatter.format_file,
-            filter=filter_records,
+            filter=_filter_records,
             enqueue=True,
             serialize=False,
             diagnose=False,

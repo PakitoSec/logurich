@@ -42,9 +42,14 @@ if __name__ == "__main__":
         "This log has module context"
     )
 
+    # Use logger.ctx() directly (no separate import needed)
+    logger.bind(session=logger.ctx("sess-42", style="cyan")).info(
+        "Using logger.ctx() instead of importing ctx"
+    )
+
     # Log an exception
     try:
-        1 / 0
+        1 / 0  # noqa: B018
     except Exception as e:
         logger.error("{}", e)
         # logger.exception("An error occurred: {}", e)

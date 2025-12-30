@@ -45,7 +45,7 @@ def rich_console_renderer(
                 item = pp.copy()
                 item = item.append(Text.from_markup(r))
                 renderable.append(item)
-            elif isinstance(r, Text) and r.split() == 1:
+            elif isinstance(r, Text) and len(r.split()) == 1:
                 item = pp.copy()
                 item = item.append_text(r)
                 renderable.append(item)
@@ -65,9 +65,12 @@ def rich_console_renderer(
     return renderable
 
 
-def set_console(console: Console):
+def set_console(console: Console) -> None:
     global _console
-    _console = console
+    if _console is None:
+        _console = console
+        return
+    _console.__dict__ = console.__dict__
 
 
 def get_console() -> Console:
@@ -91,3 +94,6 @@ def configure_console(*args: Any, **kwargs: Any) -> Console:
     _console = get_console()
     _console.__dict__ = new_console.__dict__
     return _console
+
+
+console = get_console()
