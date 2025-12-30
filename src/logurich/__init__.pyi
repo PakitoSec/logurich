@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from contextlib import AbstractContextManager
-from typing import Any, Final
+from typing import Any, Final, Optional, Union
 
 from rich.console import Console
 
 from .core import LogLevel, LoguRich
 
-LevelByModuleValue = str | int | bool
-LevelByModuleMapping = Mapping[str | None, LevelByModuleValue]
+LevelByModuleValue = Union[str, int, bool]
+LevelByModuleMapping = Mapping[Optional[str], LevelByModuleValue]
 
 __version__: Final[str]
 
@@ -20,17 +20,17 @@ LOG_LEVEL_CHOICES: Final[tuple[str, ...]]
 def init_logger(
     log_level: LogLevel,
     log_verbose: int = 0,
-    log_filename: str | None = None,
+    log_filename: Optional[str] = None,
     log_folder: str = "logs",
-    level_by_module: LevelByModuleMapping | None = None,
+    level_by_module: Optional[LevelByModuleMapping] = None,
     *,
     rich_handler: bool = False,
     diagnose: bool = False,
     enqueue: bool = True,
     highlight: bool = False,
-    rotation: str | int | None = "12:00",
-    retention: str | int | None = "10 days",
-) -> str | None: ...
+    rotation: Optional[Union[str, int]] = "12:00",
+    retention: Optional[Union[str, int]] = "10 days",
+) -> Optional[str]: ...
 def global_context_configure(**kwargs: Any) -> AbstractContextManager[None]: ...
 def global_context_set(**kwargs: Any) -> None: ...
 def propagate_loguru_to_std_logger() -> None: ...

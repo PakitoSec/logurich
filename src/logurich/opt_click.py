@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import functools
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import Any, Optional, TypeVar
 
 import click
 
@@ -113,7 +113,7 @@ def click_logger_params(func: F) -> F:
 def click_logger_init(
     logger_level: str,
     logger_verbose: int,
-    logger_filename: str | None,
+    logger_filename: Optional[str],
     logger_level_by_module: tuple[tuple[str, str], ...],
     logger_diagnose: bool,
     logger_rich: bool,
