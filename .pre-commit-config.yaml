@@ -10,11 +10,3 @@ repos:
     hooks:
       - id: ruff
       - id: ruff-format
-  - repo: local
-    hooks:
-      - id: uv-pip-compile
-        name: uv pip compile (requirements.txt)
-        entry: uv
-        language: system
-        files: ^pyproject\.toml$
-        args: ["pip", "compile", "pyproject.toml", "-o", "requirements.txt"]

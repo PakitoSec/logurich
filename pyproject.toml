@@ -8,10 +8,20 @@ authors = [
 license = "MIT"
 license-files = ["LICENSE"]
 readme = "README.md"
-requires-python = ">=3.9"
-dependencies = [
+requires-python = ">=3.10"
+keywords = [
+    "logging",
     "loguru",
-    "rich"
+    "rich",
+    "console",
+    "terminal",
+    "colored-logging",
+    "structured-logging",
+    "pretty-logging",
+]
+dependencies = [
+    "loguru==0.7.3",
+    "rich==14.2.0"
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -19,7 +29,6 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: System :: Logging",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -43,12 +52,29 @@ dev = [
   "ruff",
 ]
 
-[tool.setuptools]
-include-package-data = true
-
-[tool.setuptools.package-data]
-"logurich" = ["py.typed", "*.pyi"]
-
 [build-system]
-requires = ["setuptools>=77", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["uv_build>=0.9.20,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+    "SIM",    # flake8-simplify
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "B008",   # do not perform function calls in argument defaults
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["logurich"]

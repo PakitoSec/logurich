@@ -1,3 +1,5 @@
+"""Rich console helpers for logurich rendering."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -11,7 +13,7 @@ _console = None
 
 
 def rich_to_str(*objects, ansi: bool = True, **kwargs) -> str:
-    console = get_console()
+    console = rich_get_console()
     with console.capture() as capture:
         console.print(*objects, **kwargs)
     if ansi is True:
@@ -34,7 +36,7 @@ def rich_format_grid(prefix: Text, data: ConsoleRenderable, real_width: int) -> 
 def rich_console_renderer(
     prefix: str, rich_format: bool, data: Any
 ) -> list[ConsoleRenderable]:
-    console = get_console()
+    console = rich_get_console()
     rich_prefix = prefix[:-2] + "# "
     pp = Text.from_markup(rich_prefix)
     real_width = console.width - len(pp)
@@ -45,7 +47,7 @@ def rich_console_renderer(
                 item = pp.copy()
                 item = item.append(Text.from_markup(r))
                 renderable.append(item)
-            elif isinstance(r, Text) and r.split() == 1:
+            elif isinstance(r, Text) and len(r.split()) == 1:
                 item = pp.copy()
                 item = item.append_text(r)
                 renderable.append(item)
@@ -65,19 +67,22 @@ def rich_console_renderer(
     return renderable
 
 
-def set_console(console: Console):
+def rich_set_console(console: Console) -> None:
     global _console
-    _console = console
+    if _console is None:
+        _console = console
+        return
+    _console.__dict__ = console.__dict__
 
 
-def get_console() -> Console:
+def rich_get_console() -> Console:
     global _console
     if _console is None:
         _console = Console(markup=True)
     return _console
 
 
-def configure_console(*args: Any, **kwargs: Any) -> Console:
+def rich_configure_console(*args: Any, **kwargs: Any) -> Console:
     """Reconfigures the logurich console by replacing it with another.
 
     Args:
@@ -88,6 +93,9 @@ def configure_console(*args: Any, **kwargs: Any) -> Console:
         Return the logurich console
     """
     new_console = Console(*args, **kwargs)
-    _console = get_console()
+    _console = rich_get_console()
     _console.__dict__ = new_console.__dict__
     return _console
+
+
+console = rich_get_console()

@@ -1,6 +1,7 @@
 import random
-import string
 import re
+import string
+
 import pytest
 from rich.pretty import Pretty
 
