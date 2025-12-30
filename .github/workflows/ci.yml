@@ -24,7 +24,7 @@ jobs:
       - name: Install deps
         run: uv sync --group dev
       - name: Run ruff
-        run: uv run ruff check logurich/
+        run: uv run ruff check src/logurich
       - name: Run tests
         run: uv run -m pytest -q
 

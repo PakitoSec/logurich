@@ -20,8 +20,8 @@ keywords = [
     "pretty-logging",
 ]
 dependencies = [
-    "loguru",
-    "rich"
+    "loguru==0.7.3",
+    "rich==14.2.0"
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
