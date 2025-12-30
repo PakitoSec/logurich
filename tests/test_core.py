@@ -4,14 +4,12 @@ import pytest
 
 from logurich import (
     ContextValue,
-    ctx,
-    global_configure,
-    global_set_context,
+    global_context_configure,
+    global_context_set,
     init_logger,
     logger,
-    level_restore,
-    level_set,
 )
+from logurich.core import ctx
 
 
 @pytest.mark.parametrize(
@@ -62,7 +60,7 @@ def test_level_debug_verbose(logger, buffer):
     indirect=True,
 )
 def test_global_configure(logger, buffer):
-    with global_configure(exec_id=ctx("id_123", style="yellow")):
+    with global_context_configure(exec_id=logger.ctx("id_123", style="yellow")):
         logger.info("Hello, world!")
         logger.debug("Debug, world!")
         logger.complete()
@@ -75,9 +73,9 @@ def test_global_configure(logger, buffer):
     indirect=True,
 )
 def test_global_configure_restores_previous(logger, buffer):
-    with global_configure(exec_id=ctx("outer_ctx", style="yellow")):
+    with global_context_configure(exec_id=logger.ctx("outer_ctx", style="yellow")):
         logger.info("outer message")
-        with global_configure(exec_id=ctx("inner_ctx", style="cyan")):
+        with global_context_configure(exec_id=logger.ctx("inner_ctx", style="cyan")):
             logger.info("inner message")
         logger.info("outer message again")
     logger.info("plain message")
@@ -99,7 +97,7 @@ def test_global_configure_restores_previous(logger, buffer):
     indirect=True,
 )
 def test_with_configure(logger, buffer):
-    with logger.contextualize(exec_id=ctx("task-id", style="yellow")):
+    with logger.contextualize(exec_id=logger.ctx("task-id", style="yellow")):
         logger.info("Hello, world!")
         logger.debug("Debug, world!")
     logger.complete()
@@ -112,12 +110,12 @@ def test_with_configure(logger, buffer):
     indirect=True,
 )
 def test_set_context(logger, buffer):
-    global_set_context(exec_id=ctx("id_123", style="yellow"))
+    global_context_set(exec_id=logger.ctx("id_123", style="yellow"))
     logger.info("Hello, world!")
     logger.debug("Debug, world!")
     logger.complete()
     assert all("id_123" in log for log in buffer.getvalue().splitlines())
-    global_set_context(exec_id=None)
+    global_context_set(exec_id=None)
 
 
 @pytest.mark.parametrize(
@@ -166,7 +164,7 @@ def test_logger_ctx_in_bind(logger, buffer):
 def test_set_level_filters_messages(logger, buffer):
     """level_set() should temporarily raise the minimum log level."""
     logger.debug("before level_set")
-    level_set("WARNING")
+    logger.level_set("WARNING")
     logger.debug("should be filtered")
     logger.info("also filtered")
     logger.warning("should appear")
@@ -185,9 +183,9 @@ def test_set_level_filters_messages(logger, buffer):
 )
 def test_restore_level_resets_filtering(logger, buffer):
     """level_restore() should reset the log level to the original."""
-    level_set("ERROR")
+    logger.level_set("ERROR")
     logger.warning("filtered warning")
-    level_restore()
+    logger.level_restore()
     logger.debug("after restore")
     logger.complete()
     output = buffer.getvalue()

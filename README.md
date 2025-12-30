@@ -37,6 +37,12 @@ logger.rich(
     title="Rich Panel",
     prefix=False,
 )
+
+# Temporarily raise the minimum level
+logger.level_set("WARNING")
+logger.info("filtered")
+logger.warning("visible")
+logger.level_restore()
 ```
 
 ## Click CLI helper

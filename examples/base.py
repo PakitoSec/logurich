@@ -1,7 +1,7 @@
 from rich.panel import Panel
 from rich.table import Table
 
-from logurich import ctx, global_configure, init_logger, logger
+from logurich import global_context_configure, init_logger, logger
 
 logger.info("This is a basic log message")
 
@@ -31,14 +31,14 @@ if __name__ == "__main__":
     logger.rich("INFO", "[bold blue]This is a rich formatted log message[/bold blue]")
 
     # Use context in logging
-    with global_configure(app=ctx("example", style="yellow")):
+    with global_context_configure(app=logger.ctx("example", style="yellow")):
         logger.info("This log has app context")
 
-    with logger.contextualize(user=ctx("test", style="cyan", show_key=True)):
+    with logger.contextualize(user=logger.ctx("test", style="cyan", show_key=True)):
         logger.info("ok")
 
     # Log with additional context
-    logger.bind(environment=ctx("demo", style="yellow")).info(
+    logger.bind(environment=logger.ctx("demo", style="yellow")).info(
         "This log has module context"
     )
 
@@ -46,6 +46,12 @@ if __name__ == "__main__":
     logger.bind(session=logger.ctx("sess-42", style="cyan")).info(
         "Using logger.ctx() instead of importing ctx"
     )
+
+    # Temporarily raise the minimum level
+    logger.level_set("WARNING")
+    logger.info("filtered")
+    logger.warning("visible")
+    logger.level_restore()
 
     # Log an exception
     try:

@@ -1,3 +1,5 @@
+"""Core logging configuration and helpers for logurich."""
+
 from __future__ import annotations
 
 import contextlib
@@ -109,10 +111,6 @@ class ContextValue:
 def _normalize_context_key(key: str) -> str:
     if key.startswith("context::"):
         return key
-    if key.startswith("context"):
-        raise ValueError(
-            "Legacy context keys using the 'context__' pattern are no longer supported."
-        )
     return f"context::{key}"
 
 
@@ -386,7 +384,7 @@ _Logger.ctx = staticmethod(ctx)
 
 
 @contextlib.contextmanager
-def global_configure(**kwargs):
+def global_context_configure(**kwargs):
     previous = {}
     for key in kwargs:
         normalized_key = _normalize_context_key(key)
@@ -398,7 +396,7 @@ def global_configure(**kwargs):
         for existing in matching_keys:
             if existing not in previous:
                 previous[existing] = extra_logger[existing]
-    global_set_context(**kwargs)
+    global_context_set(**kwargs)
     try:
         yield
     finally:
@@ -417,7 +415,7 @@ def global_configure(**kwargs):
         logger.configure(extra=extra_logger)
 
 
-def global_set_context(**kwargs):
+def global_context_set(**kwargs):
     for key, value in kwargs.items():
         normalized_key = _normalize_context_key(key)
         normalized_value = _coerce_context_value(value)
@@ -438,7 +436,7 @@ def global_set_context(**kwargs):
     logger.configure(extra=extra_logger)
 
 
-def level_set(level: str):
+def level_set(level: LogLevel):
     extra_logger.update({"__level_upper_only": level})
     logger.configure(extra=extra_logger)
 
@@ -448,12 +446,16 @@ def level_restore():
     logger.configure(extra=extra_logger)
 
 
+_Logger.level_set = staticmethod(level_set)
+_Logger.level_restore = staticmethod(level_restore)
+
+
 def propagate_loguru_to_std_logger():
     logger.remove()
     logger.add(_PropagateHandler(), format="{message}")
 
 
-def mp_configure(logger_):
+def configure_child_logger(logger_):
     """Configure a logger in a child process from a parent process logger.
 
     This function sets up the logger to work properly in multiprocessing contexts.
@@ -469,8 +471,8 @@ def mp_configure(logger_):
         >>> init_logger("INFO")
         >>> from multiprocessing import Process
         >>> def worker(logger_instance):
-        >>>     from logurich import mp_configure
-        >>>     mp_configure(logger_instance)
+        >>>     from logurich import logger
+        >>>     logger.configure_child_logger(logger_instance)
         >>>     # Now the logger in this process has the same configuration
         >>>
         >>> p = Process(target=worker, args=(logger,))
@@ -478,6 +480,9 @@ def mp_configure(logger_):
     """
     logging.basicConfig(handlers=[_InterceptHandler()], level=0, force=True)
     _reinstall_loguru(logger, logger_)
+
+
+_Logger.configure_child_logger = staticmethod(configure_child_logger)
 
 
 def init_logger(

@@ -1,3 +1,5 @@
+"""Utility helpers for logurich."""
+
 import os
 
 

@@ -5,7 +5,7 @@ import time
 from rich.panel import Panel
 from rich.table import Table
 
-from logurich import ctx, global_configure, init_logger, logger, mp_configure
+from logurich import global_context_configure, init_logger, logger
 
 
 def worker_function(worker_id):
@@ -14,10 +14,12 @@ def worker_function(worker_id):
     Shows how to configure logurich in a child process.
     """
     # Configure the logger in this process
-    mp_configure(logger)
+    logger.configure_child_logger(logger)
 
     # Set a context variable for this worker
-    with global_configure(worker=ctx(f"Worker-{worker_id}", show_key=True)):
+    with global_context_configure(
+        worker=logger.ctx(f"Worker-{worker_id}", show_key=True)
+    ):
         # Log some basic messages
         logger.info(f"Worker {worker_id} starting")
         logger.debug(f"Worker {worker_id} debug message")
@@ -60,7 +62,9 @@ def main():
     logger.info("Multiprocessing example starting")
 
     # Create context for the main process
-    with global_configure(process=ctx("Main-Process", style="magenta", show_key=True)):
+    with global_context_configure(
+        process=logger.ctx("Main-Process", style="magenta", show_key=True)
+    ):
         # Create and start multiple worker processes
         num_workers = 3
         processes = []

@@ -4,36 +4,35 @@ import pytest
 from rich.panel import Panel
 from rich.table import Table
 
-from logurich import ctx
-from logurich.core import global_configure, mp_configure
+from logurich import global_context_configure
 
 
 def worker_process(logger_):
     from logurich.core import logger
 
-    mp_configure(logger_)
+    logger.configure_child_logger(logger_)
     logger.debug("Test message from child process")
 
 
 def worker_with_context(logger_):
     from logurich.core import logger
 
-    mp_configure(logger_)
+    logger.configure_child_logger(logger_)
     logger.info("Message with worker context")
 
 
 def worker_process_context(logger_):
     from logurich import logger
 
-    mp_configure(logger_)
-    with logger.contextualize(task_id=ctx("task-id")):
+    logger.configure_child_logger(logger_)
+    with logger.contextualize(task_id=logger.ctx("task-id")):
         logger.info("Message with context")
 
 
 def worker_with_rich_logging(logger_):
     from logurich.core import logger
 
-    mp_configure(logger_)
+    logger.configure_child_logger(logger_)
     panel = Panel("Test rich panel")
     table = Table(title="Test table")
     table.add_column("Column 1")
@@ -47,7 +46,7 @@ def worker_with_rich_logging(logger_):
     [{"level": "DEBUG", "enqueue": True}],
     indirect=True,
 )
-def test_mp_configure(logger, buffer):
+def test_configure_child_logger(logger, buffer):
     process = mp.Process(target=worker_process, args=(logger,))
     process.start()
     process.join()
@@ -63,7 +62,7 @@ def test_mp_configure(logger, buffer):
     [{"level": "DEBUG", "enqueue": True}],
     indirect=True,
 )
-def test_mp_configure_context(logger, buffer):
+def test_configure_child_logger_context(logger, buffer):
     process = mp.Process(target=worker_process_context, args=(logger,))
     process.start()
     process.join()
@@ -77,7 +76,7 @@ def test_mp_configure_context(logger, buffer):
     indirect=True,
 )
 def test_global_configure_in_mp(logger, buffer):
-    with global_configure(worker=ctx("TestWorker")):
+    with global_context_configure(worker=logger.ctx("TestWorker")):
         process = mp.Process(target=worker_with_context, args=(logger,))
         process.start()
         process.join()

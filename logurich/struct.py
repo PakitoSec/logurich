@@ -1,3 +1,5 @@
+"""Shared logger configuration state."""
+
 extra_logger = {
     "__min_level": None,
     "__level_upper_only": None,
