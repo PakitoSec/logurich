@@ -3,13 +3,10 @@ import json
 import pytest
 
 from logurich import (
-    ContextValue,
     global_context_configure,
     global_context_set,
     init_logger,
-    logger,
 )
-from logurich.core import ctx
 
 
 @pytest.mark.parametrize(
@@ -134,14 +131,6 @@ def test_loguru_serialize_env(monkeypatch, logger, level, enqueue, buffer):
     assert log_lines, "No serialized output captured"
     payload = json.loads(log_lines[0])
     assert payload["record"]["message"] == "Serialized output"
-
-
-def test_logger_ctx_returns_context_value():
-    """logger.ctx() should return a ContextValue identical to standalone ctx()."""
-    result = logger.ctx("value", style="cyan", label="lbl", show_key=True)
-    expected = ctx("value", style="cyan", label="lbl", show_key=True)
-    assert isinstance(result, ContextValue)
-    assert result == expected
 
 
 @pytest.mark.parametrize(

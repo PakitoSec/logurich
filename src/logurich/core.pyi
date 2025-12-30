@@ -5,7 +5,23 @@ from typing import Any, Literal
 from loguru._logger import Logger as _Logger
 from rich.console import ConsoleRenderable
 
-from .core import ContextValue
+class ContextValue:
+    value: Any
+    value_style: str | None
+    bracket_style: str | None
+    label: str | None
+    show_key: bool
+
+    def __init__(
+        self,
+        value: Any,
+        value_style: str | None = ...,
+        bracket_style: str | None = ...,
+        label: str | None = ...,
+        show_key: bool = ...,
+    ) -> None: ...
+    def _label(self, key: str) -> str | None: ...
+    def render(self, key: str, *, is_rich_handler: bool) -> str: ...
 
 class LoguRich(_Logger):
     @staticmethod

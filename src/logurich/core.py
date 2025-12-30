@@ -39,6 +39,7 @@ def _rich_logger(
 
 _Logger.rich = partialmethod(_rich_logger)
 logger = _logger
+LoguRich = _Logger
 
 
 COLOR_ALIASES = {

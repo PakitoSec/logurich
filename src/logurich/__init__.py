@@ -11,6 +11,8 @@ from .console import (
 )
 from .core import (
     LOG_LEVEL_CHOICES,
+    LogLevel,
+    LoguRich,
     global_context_configure,
     global_context_set,
     init_logger,
@@ -32,4 +34,6 @@ __all__ = [
     "rich_set_console",
     "rich_to_str",
     "LOG_LEVEL_CHOICES",
+    "LogLevel",
+    "LoguRich",
 ]
