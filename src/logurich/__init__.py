@@ -20,8 +20,6 @@ from .core import (
     propagate_loguru_to_std_logger,
 )
 
-init_logger("INFO")
-
 __all__ = [
     "init_logger",
     "logger",

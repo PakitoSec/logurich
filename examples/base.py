@@ -3,8 +3,6 @@ from rich.table import Table
 
 from logurich import global_context_configure, init_logger, logger
 
-logger.info("This is a basic log message")
-
 
 def create_rich_table():
     table = Table(title="Sample Table")
@@ -17,6 +15,8 @@ def create_rich_table():
 
 
 if __name__ == "__main__":
+    init_logger("INFO")
+    logger.info("This is a basic log message")
     logger.info("Example message")
     logger.rich("INFO", "OK")
     logger.rich("INFO", {"fake": "test"})

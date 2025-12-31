@@ -496,13 +496,16 @@ def init_logger(
     diagnose: bool = False,
     enqueue: bool = True,
     highlight: bool = False,
+    enable_all: bool = True,
     rotation: Optional[Union[str, int]] = "12:00",
     retention: Optional[Union[str, int]] = "10 days",
 ) -> Optional[str]:
     """Initialize and configure the logger with rich formatting and customized handlers.
 
     This function sets up a logging system using Loguru with optional Rich integration.
-    It configures console output and optionally file-based logging with rotation.
+    It configures console output and optionally file-based logging with rotation. Call
+    it early in your application's startup before any logging, since LoguRich does not
+    auto-initialize handlers.
 
     Args:
         log_level: The minimum logging level to display (e.g. "DEBUG", "INFO", "WARNING").
@@ -525,6 +528,8 @@ def init_logger(
         enqueue (bool, optional): Whether to use a queue for thread-safe logging.
             Defaults to True.
         highlight (bool, optional): Whether to highlight log messages. Defaults to False.
+        enable_all (bool, optional): Whether to enable logging for all modules.
+            Defaults to True.
         rotation (str or int or None, optional): When to rotate log files. Can be a time string
             (e.g. "12:00", "1 week"), size (e.g. "500 MB"), or None to disable rotation.
             Defaults to "12:00".
@@ -540,6 +545,8 @@ def init_logger(
         >>> logger.info("Application started")
         >>> logger.debug("Debug information")  # Won't be displayed with INFO level
     """
+    if enable_all:
+        logger.enable("")
     if rich_handler is False:
         env_rich_handler = parse_bool_env("LOGURU_RICH")
         if env_rich_handler is not None:
