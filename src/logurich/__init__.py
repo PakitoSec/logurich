@@ -13,6 +13,7 @@ from .core import (
     LOG_LEVEL_CHOICES,
     LogLevel,
     LoguRich,
+    ctx,
     global_context_configure,
     global_context_set,
     init_logger,
@@ -23,6 +24,7 @@ from .core import (
 __all__ = [
     "init_logger",
     "logger",
+    "ctx",
     "global_context_configure",
     "global_context_set",
     "propagate_loguru_to_std_logger",

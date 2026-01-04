@@ -31,10 +31,11 @@ def _rich_logger(
     title: str = "",
     prefix: bool = True,
     end: str = "\n",
+    width: Optional[int] = None,
 ):
-    self.opt(depth=1).bind(rich_console=renderables, rich_format=prefix, end=end).log(
-        log_level, title
-    )
+    self.opt(depth=1).bind(
+        rich_console=renderables, rich_format=prefix, end=end, rich_width=width
+    ).log(log_level, title)
 
 
 _Logger.rich = partialmethod(_rich_logger)
@@ -246,14 +247,18 @@ class _Formatter:
         end = record["extra"].get("end", "\n")
         prefix = str(Text.from_markup(record["extra"].pop("_prefix")))
         rich_console = record["extra"].pop("rich_console", [])
+        rich_width = record["extra"].pop("rich_width", None)
         list_context = record["extra"].pop("_build_list_context", [])
         record["message"] = str(Text.from_markup(record["message"]))
         rich_data = ""
         if rich_console:
             renderables = rich_console_renderer(
-                prefix, record["extra"].get("rich_format", True), rich_console
+                prefix,
+                record["extra"].get("rich_format", True),
+                rich_console,
+                rich_width,
             )
-            rich_data = str(rich_to_str(*renderables, ansi=False))
+            rich_data = str(rich_to_str(*renderables, ansi=False, width=rich_width))
             rich_data = rich_data.replace("{", " {{").replace("}", "}}")
             record["message"] += "\n" + rich_data
         context = str(
@@ -328,7 +333,7 @@ def _conf_level_by_module(conf: dict):
         if levelno_ < 0:
             raise ValueError(
                 f"The filter dict contains a module '{module}' associated to an invalid level, "
-                "it should be a positive interger, not: '{levelno_}'"
+                f"it should be a positive integer, not: '{levelno_}'"
             )
         level_per_module[module] = levelno_
     return level_per_module

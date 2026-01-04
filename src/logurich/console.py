@@ -2,23 +2,32 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
 from rich.console import Console, ConsoleRenderable
 from rich.pretty import Pretty
 from rich.table import Table
 from rich.text import Text
 
-_console = None
+_console: Optional[Console] = None
 
 
-def rich_to_str(*objects, ansi: bool = True, **kwargs) -> str:
+def rich_to_str(
+    *objects: Any, ansi: bool = True, width: Optional[int] = None, **kwargs: Any
+) -> str:
     console = rich_get_console()
-    with console.capture() as capture:
-        console.print(*objects, **kwargs)
-    if ansi is True:
-        return capture.get()
-    return str(Text.from_ansi(capture.get()))
+    original_width = console.width
+    if width is not None:
+        console.width = width
+    try:
+        with console.capture() as capture:
+            console.print(*objects, **kwargs)
+        if ansi is True:
+            return capture.get()
+        return str(Text.from_ansi(capture.get()))
+    finally:
+        if width is not None:
+            console.width = original_width
 
 
 def rich_format_grid(prefix: Text, data: ConsoleRenderable, real_width: int) -> Table:
@@ -34,12 +43,13 @@ def rich_format_grid(prefix: Text, data: ConsoleRenderable, real_width: int) -> 
 
 
 def rich_console_renderer(
-    prefix: str, rich_format: bool, data: Any
+    prefix: str, rich_format: bool, data: Any, width: Optional[int] = None
 ) -> list[ConsoleRenderable]:
     console = rich_get_console()
     rich_prefix = prefix[:-2] + "# "
     pp = Text.from_markup(rich_prefix)
-    real_width = console.width - len(pp)
+    effective_width = width if width is not None else console.width
+    real_width = max(1, effective_width - len(pp))
     renderable = []
     for r in data:
         if rich_format:
@@ -62,6 +72,10 @@ def rich_console_renderer(
         else:
             if isinstance(r, str):
                 renderable.append(Text.from_ansi(r))
+            elif width is not None:
+                # Re-render with specified width
+                rendered = rich_to_str(r, width=width, end="")
+                renderable.append(Text.from_ansi(rendered))
             else:
                 renderable.append(r)
     return renderable
