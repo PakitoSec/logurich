@@ -178,6 +178,7 @@ class CustomHandler(Handler):
         list_context: list[str] = record.extra.get("_build_list_context", [])
         rich_console = record.extra.get("rich_console")
         rich_format = record.extra.get("rich_format")
+        rich_width = record.extra.get("rich_width")
 
         try:
             if record.msg:
@@ -192,7 +193,11 @@ class CustomHandler(Handler):
                 output_text.append_text(message_text)
                 self._console.print(output_text, end=end, highlight=False)
             if rich_console:
-                renderable = rich_console_renderer(prefix, rich_format, rich_console)
-                self._console.print(*renderable, end=end, highlight=False)
+                renderable = rich_console_renderer(
+                    prefix, rich_format, rich_console, rich_width
+                )
+                self._console.print(
+                    *renderable, end=end, highlight=False, width=rich_width
+                )
         except Exception:
             self.handleError(record)

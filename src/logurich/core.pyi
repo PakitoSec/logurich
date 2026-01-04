@@ -47,6 +47,7 @@ class LoguRich(_Logger):
         title: str = "",
         prefix: bool = True,
         end: str = "\n",
+        width: Optional[int] = None,
     ) -> None: ...
 
 logger: LoguRich

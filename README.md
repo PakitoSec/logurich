@@ -38,6 +38,14 @@ logger.rich(
     prefix=False,
 )
 
+# Rich object with custom console width
+logger.rich(
+    "INFO",
+    Panel("Rich Panel with custom width", border_style="blue"),
+    title="Custom Width",
+    width=80,
+)
+
 # Temporarily raise the minimum level
 logger.level_set("WARNING")
 logger.info("filtered")
