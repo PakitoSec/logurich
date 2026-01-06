@@ -1,11 +1,12 @@
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 
 from logurich import global_context_configure, init_logger, logger
 
 
 def create_rich_table():
-    table = Table(title="Sample Table", expand=True)
+    table = Table(title="Sample Table")
     columns = [f"Column {i + 1}" for i in range(5)]
     for col in columns:
         table.add_column(col)
@@ -79,4 +80,8 @@ if __name__ == "__main__":
     t = create_rich_table()
     logger.rich("INFO", t, title="test")
     logger.rich("INFO", t, title="test", prefix=False)
-    logger.rich("INFO", t, title="test", width=100)
+    logger.rich("INFO", t, title="[bold red]test width=50[/bold red]", width=50)
+    logger.rich("INFO", Text("-" * 10), title="[bold red]test width=10[/bold red]", width=10)
+    logger.rich("INFO", Text("-" * 10), title="[bold red]test width=5[/bold red]", width=5)
+    logger.rich("INFO", "-" * 10, title="[bold red]test width=10[/bold red]", width=10)
+    logger.rich("INFO", "-" * 10, title="[bold red]test width=5[/bold red]", width=5)

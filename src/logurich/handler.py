@@ -196,8 +196,6 @@ class CustomHandler(Handler):
                 renderable = rich_console_renderer(
                     prefix, rich_format, rich_console, rich_width
                 )
-                self._console.print(
-                    *renderable, end=end, highlight=False, width=rich_width
-                )
+                self._console.print(*renderable, end=end, highlight=False)
         except Exception:
             self.handleError(record)
