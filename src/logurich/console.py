@@ -16,69 +16,92 @@ def rich_to_str(
     *objects: Any, ansi: bool = True, width: Optional[int] = None, **kwargs: Any
 ) -> str:
     console = rich_get_console()
-    original_width = console.width
+    if width is not None and width < 1:
+        raise ValueError("width must be >= 1")
+    print_kwargs = dict(kwargs)
     if width is not None:
-        console.width = width
-    try:
-        with console.capture() as capture:
-            console.print(*objects, **kwargs)
-        if ansi is True:
-            return capture.get()
-        return str(Text.from_ansi(capture.get()))
-    finally:
-        if width is not None:
-            console.width = original_width
+        print_kwargs["width"] = width
+        print_kwargs["no_wrap"] = True
+        print_kwargs["overflow"] = "ellipsis"
+    with console.capture() as capture:
+        console.print(*objects, **print_kwargs)
+    output = capture.get()
+    if ansi:
+        return output
+    return Text.from_ansi(output).plain
 
 
-def rich_format_grid(prefix: Text, data: ConsoleRenderable, real_width: int) -> Table:
+def rich_format_grid(
+    text_rich_prefix: Text, data: ConsoleRenderable, content_width: Optional[int]
+) -> Table:
     grid = Table.grid()
-    grid.add_column()
-    grid.add_column()
-    content = Text.from_ansi(rich_to_str(data, width=real_width, end=""))
+    grid.add_column(no_wrap=True)
+    grid.add_column(no_wrap=True)
+    content = Text.from_ansi(rich_to_str(data, width=content_width, end=""))
     lines = content.split()
     for line in lines:
-        pline = prefix.copy()
-        grid.add_row(pline, line)
+        grid.add_row(text_rich_prefix.copy(), line)
     return grid
 
 
+def _render_rich_item(
+    item: Any,
+    text_rich_prefix: Text,
+    available_width: int,
+    effective_width: int,
+) -> ConsoleRenderable:
+    """Render a single item with rich markup formatting."""
+    if isinstance(item, str):
+        content = Text.from_markup(item)
+        if available_width != effective_width:
+            return rich_format_grid(text_rich_prefix, content, effective_width)
+        return text_rich_prefix.copy().append(content)
+
+    if isinstance(item, ConsoleRenderable):
+        return rich_format_grid(text_rich_prefix, item, effective_width)
+
+    return rich_format_grid(
+        text_rich_prefix,
+        Pretty(item, max_depth=2, max_length=2),
+        effective_width,
+    )
+
+
+def _render_plain_item(
+    item: Any,
+    effective_width: int,
+    content_width: Optional[int],
+) -> ConsoleRenderable:
+    """Render a single item without rich markup formatting."""
+    if isinstance(item, str):
+        return Text.from_ansi(item)
+
+    if content_width is not None:
+        rendered = rich_to_str(item, width=effective_width, end="")
+        return Text.from_ansi(rendered)
+
+    return item
+
+
 def rich_console_renderer(
-    prefix: str, rich_format: bool, data: Any, width: Optional[int] = None
+    prefix: str, rich_format: bool, data: Any, content_width: Optional[int] = None
 ) -> list[ConsoleRenderable]:
     console = rich_get_console()
     rich_prefix = prefix[:-2] + "# "
-    pp = Text.from_markup(rich_prefix)
-    effective_width = width if width is not None else console.width
-    real_width = max(1, effective_width - len(pp))
-    renderable = []
-    for r in data:
-        if rich_format:
-            if isinstance(r, str):
-                item = pp.copy()
-                item = item.append(Text.from_markup(r))
-                renderable.append(item)
-            elif isinstance(r, Text) and len(r.split()) == 1:
-                item = pp.copy()
-                item = item.append_text(r)
-                renderable.append(item)
-            elif isinstance(r, ConsoleRenderable):
-                renderable.append(rich_format_grid(pp, r, real_width))
-            else:
-                renderable.append(
-                    rich_format_grid(
-                        pp, Pretty(r, max_depth=2, max_length=2), real_width
-                    )
-                )
-        else:
-            if isinstance(r, str):
-                renderable.append(Text.from_ansi(r))
-            elif width is not None:
-                # Re-render with specified width
-                rendered = rich_to_str(r, width=width, end="")
-                renderable.append(Text.from_ansi(rendered))
-            else:
-                renderable.append(r)
-    return renderable
+    text_rich_prefix = Text.from_markup(rich_prefix)
+    available_width = max(1, console.width - len(text_rich_prefix))
+    effective_width = (
+        min(available_width, content_width)
+        if content_width is not None
+        else available_width
+    )
+
+    if rich_format:
+        return [
+            _render_rich_item(r, text_rich_prefix, available_width, effective_width)
+            for r in data
+        ]
+    return [_render_plain_item(r, effective_width, content_width) for r in data]
 
 
 def rich_set_console(console: Console) -> None:
