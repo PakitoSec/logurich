@@ -342,9 +342,9 @@ def _install_logger_class() -> None:
 
 _install_logger_class()
 
-logger: LogurichLogger = logging.getLogger("logurich")
-logger.setLevel(logging.NOTSET)
-logger.propagate = True
+_internal_logger: LogurichLogger = logging.getLogger("logurich")
+_internal_logger.setLevel(logging.NOTSET)
+_internal_logger.propagate = True
 
 
 def _configure_level_by_module(
@@ -645,7 +645,7 @@ def shutdown_logger() -> None:
 
     root = logging.getLogger()
     root_handlers = _remove_handlers(root)
-    logger_handlers = _remove_handlers(logger)
+    logger_handlers = _remove_handlers(_internal_logger)
     final_handlers = list(logger_state.get("final_handlers") or ())
     _close_handlers(_unique_handlers(root_handlers, logger_handlers, final_handlers))
 
@@ -762,8 +762,8 @@ def init_logger(
 
     root = logging.getLogger()
     root.setLevel(logging.NOTSET)
-    logger.setLevel(logging.NOTSET)
-    logger.propagate = True
+    _internal_logger.setLevel(logging.NOTSET)
+    _internal_logger.propagate = True
 
     logger_state.update(
         {

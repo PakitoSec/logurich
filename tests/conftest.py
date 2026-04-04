@@ -1,9 +1,9 @@
+import logging
 from io import StringIO
 
 import pytest
 
 from logurich import init_logger, shutdown_logger
-from logurich import logger as _logger
 from logurich.console import rich_configure_console
 
 
@@ -30,5 +30,5 @@ def logger(request):
         enqueue=cfg["enqueue"],
         rich_handler=cfg["rich_handler"],
     )
-    yield _logger
+    yield logging.getLogger("tests.fixture")
     shutdown_logger()

@@ -7,12 +7,13 @@ with Click CLI applications.
 from __future__ import annotations
 
 import functools
+import logging
 from collections.abc import Callable
 from typing import Any, Optional, TypeVar
 
 import click
 
-from . import LOG_LEVEL_CHOICES, init_logger, logger, shutdown_logger
+from . import LOG_LEVEL_CHOICES, init_logger, shutdown_logger
 
 LOGGER_PARAM_NAMES = (
     "logger_level",
@@ -22,6 +23,7 @@ LOGGER_PARAM_NAMES = (
     "logger_rich",
 )
 _CLICK_SHUTDOWN_META_KEY = "logurich_shutdown_registered"
+_logger = logging.getLogger(__name__)
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -46,7 +48,9 @@ def click_logger_params(func: F) -> F:
 
     Example:
         >>> import click
+        >>> import logging
         >>> from logurich.opt_click import click_logger_params
+        >>> logger = logging.getLogger(__name__)
         >>>
         >>> @click.command()
         >>> @click_logger_params
@@ -139,9 +143,9 @@ def click_logger_init(
     if click_ctx is not None and not click_ctx.meta.get(_CLICK_SHUTDOWN_META_KEY):
         click_ctx.call_on_close(shutdown_logger)
         click_ctx.meta[_CLICK_SHUTDOWN_META_KEY] = True
-    logger.debug("Log level:            %s", logger_level)
-    logger.debug("Log verbose:          %s", logger_verbose)
-    logger.debug("Log filename:         %s", logger_filename)
-    logger.debug("Log path:             %s", log_path)
-    logger.debug("Log level by module:  %s", lbm)
-    logger.debug("Log rich handler:     %s", logger_rich)
+    _logger.debug("Log level:            %s", logger_level)
+    _logger.debug("Log verbose:          %s", logger_verbose)
+    _logger.debug("Log filename:         %s", logger_filename)
+    _logger.debug("Log path:             %s", log_path)
+    _logger.debug("Log level by module:  %s", lbm)
+    _logger.debug("Log rich handler:     %s", logger_rich)

@@ -16,11 +16,15 @@ pip install logurich[click]
 ## Usage
 
 ```python
+import logging
+
 from rich.panel import Panel
 
-from logurich import init_logger, logger
+from logurich import init_logger
 
 init_logger("INFO", enqueue=False)
+
+logger = logging.getLogger(__name__)
 
 logger.info("This is a log message")
 logger.info("Hello %s", "world")
@@ -48,9 +52,26 @@ logger.info(
 
 ```
 
-`logger.ctx(...)` is shorthand for the existing module-level `ctx(...)` helper. `logger.contextualize(...)` is a convenience alias for `global_context_configure(...)`. The module-level helpers remain supported if you prefer `global_context_configure(...)` or `extra={"context": {"key": ctx(...)}}`.
+Named loggers returned by `logging.getLogger(...)` expose `ctx(...)`, `rich(...)`, `bind(...)`, and `contextualize(...)`. `logger.ctx(...)` is shorthand for the existing module-level `ctx(...)` helper, and `logger.contextualize(...)` is a convenience alias for `global_context_configure(...)`. The module-level helpers remain supported if you prefer `global_context_configure(...)` or `extra={"context": {"key": ctx(...)}}`.
 
 For short-lived scripts and CLIs, `init_logger()` automatically registers an `atexit` hook, so you do not need to call `shutdown_logger()` just to flush logs at process exit.
+
+## Named Loggers
+
+Use the standard library to create named loggers:
+
+```python
+import logging
+
+from logurich import init_logger
+
+init_logger("INFO", enqueue=False)
+
+logger = logging.getLogger(__name__)
+logger.info("Hello from %s", __name__)
+```
+
+Logurich does not export a module-level logger or logger factory. Clients should create named loggers with `logging.getLogger(...)`.
 
 ## Using Logurich in Reusable Libraries
 
@@ -148,13 +169,15 @@ Install the optional Click extra to automatically expose logger configuration fl
 
 ```python
 import click
-from logurich import logger
+import logging
+
 from logurich.opt_click import click_logger_params
 
 
 @click.command()
 @click_logger_params
 def cli():
+    logger = logging.getLogger(__name__)
     logger.info("Click integration ready!")
 ```
 

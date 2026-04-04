@@ -14,9 +14,6 @@ from logurich import (
     init_logger,
     shutdown_logger,
 )
-from logurich import (
-    logger as exported_logger,
-)
 from logurich.console import rich_configure_console
 from logurich.struct import logger_state
 
@@ -160,9 +157,17 @@ def test_global_context_set(logger, buffer):
 
 
 def test_logger_ctx_matches_module_helper():
-    assert exported_logger.ctx("demo", style="yellow", show_key=True) == ctx(
+    named_logger = logging.getLogger("tests.ctx")
+    assert named_logger.ctx("demo", style="yellow", show_key=True) == ctx(
         "demo", style="yellow", show_key=True
     )
+
+
+def test_public_package_does_not_export_logger():
+    import logurich
+
+    assert "logger" not in logurich.__all__
+    assert not hasattr(logurich, "logger")
 
 
 def test_named_logger_ctx_value_renders(buffer):
@@ -358,10 +363,11 @@ def test_exception_logging_preserves_traceback(logger, buffer):
 
 def test_bind_returns_bound_logger(buffer):
     init_logger("INFO", enqueue=False)
-    bound = exported_logger.bind(module=ctx("PM-API", style="magenta"))
+    named_logger = logging.getLogger("tests.bind")
+    bound = named_logger.bind(module=ctx("PM-API", style="magenta"))
     assert isinstance(bound, BoundLogger)
     # Original logger is not a BoundLogger (not mutated).
-    assert not isinstance(exported_logger, BoundLogger)
+    assert not isinstance(named_logger, BoundLogger)
     shutdown_logger()
 
 
@@ -449,7 +455,9 @@ def test_bound_logger_contextualize_with_bound_context(logger, buffer):
 
 def test_bound_logger_ctx_method(buffer):
     init_logger("INFO", enqueue=False)
-    bound = exported_logger.bind(module=ctx("PM-API", style="magenta"))
+    bound = logging.getLogger("tests.bound.ctx").bind(
+        module=ctx("PM-API", style="magenta")
+    )
     assert bound.ctx("demo", style="yellow", show_key=True) == ctx(
         "demo", style="yellow", show_key=True
     )
@@ -458,7 +466,9 @@ def test_bound_logger_ctx_method(buffer):
 
 def test_bound_logger_rich_method(buffer):
     init_logger("INFO", enqueue=False)
-    bound = exported_logger.bind(module=ctx("PM-API", style="magenta"))
+    bound = logging.getLogger("tests.bound.rich").bind(
+        module=ctx("PM-API", style="magenta")
+    )
     bound.rich("INFO", Panel("Rich from bound logger"), title="bound-rich")
     shutdown_logger()
     output = buffer.getvalue()
