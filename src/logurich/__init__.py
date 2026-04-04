@@ -1,6 +1,6 @@
 """Public package exports for logurich."""
 
-__version__ = "0.7.1"
+__version__ = "0.8.0"
 
 from .console import (
     console,
@@ -11,23 +11,32 @@ from .console import (
 )
 from .core import (
     LOG_LEVEL_CHOICES,
+    BoundLogger,
+    ContextValue,
     LogLevel,
-    LoguRich,
+    LogurichLogger,
+    configure_child_logging,
     ctx,
+    get_log_queue,
     global_context_configure,
     global_context_set,
     init_logger,
     logger,
-    propagate_loguru_to_std_logger,
+    shutdown_logger,
 )
 
 __all__ = [
     "init_logger",
     "logger",
+    "get_log_queue",
+    "configure_child_logging",
+    "shutdown_logger",
     "ctx",
+    "ContextValue",
+    "BoundLogger",
+    "LogurichLogger",
     "global_context_configure",
     "global_context_set",
-    "propagate_loguru_to_std_logger",
     "console",
     "rich_configure_console",
     "rich_get_console",
@@ -35,5 +44,4 @@ __all__ = [
     "rich_to_str",
     "LOG_LEVEL_CHOICES",
     "LogLevel",
-    "LoguRich",
 ]

@@ -1,8 +1,12 @@
 """Shared logger configuration state."""
 
-extra_logger = {
-    "__min_level": None,
-    "__level_upper_only": None,
-    "__level_per_module": None,
-    "__rich_highlight": False,
+from typing import Any
+
+logger_state: dict[str, Any] = {
+    "min_level": None,
+    "level_by_module": None,
+    "rich_highlight": False,
+    "queue": None,
+    "listener": None,
+    "final_handlers": (),
 }

@@ -1,3 +1,4 @@
+import logging
 import multiprocessing as mp
 import os
 import random
@@ -9,16 +10,17 @@ from rich.table import Table
 from rich.text import Text
 
 from logurich import (
+    configure_child_logging,
+    ctx,
+    get_log_queue,
     global_context_configure,
     global_context_set,
     init_logger,
-    logger,
+    shutdown_logger,
 )
 
 
-# Simulate some data to process
 def generate_data(num_items):
-    """Generate some random data items to process."""
     return [
         {
             "id": i,
@@ -29,250 +31,142 @@ def generate_data(num_items):
     ]
 
 
+def init_worker(log_queue):
+    configure_child_logging(log_queue)
+
+
 def process_item(item):
-    """
-    Process a single data item in a worker process.
-
-    Args:
-        item: The data item to process
-
-    Returns:
-        dict: The processed item result
-    """
-    # Configure logurich for this process
-    logger.configure_child_logger(logger)
-
-    # Set context variables for this item
-    global_context_set(item=logger.ctx(str(item["id"]), label="item", style="cyan"))
+    logger = logging.getLogger("processor.worker")
+    global_context_set(item=ctx(str(item["id"]), label="item", style="cyan"))
 
     try:
-        # Log the start of processing
-        logger.info(f"Processing item {item['id']}")
+        logger.info("Processing item %s", item["id"])
+        time.sleep(item["complexity"] * 0.1)
 
-        # Simulate processing time based on complexity
-        processing_time = item["complexity"] * 0.1
-        time.sleep(processing_time)
-
-        # For more complex items, show detailed information with rich logging
         if item["complexity"] > 7:
             table = Table(title=f"Item {item['id']} Details")
             table.add_column("Attribute")
             table.add_column("Value")
-            for k, v in item.items():
-                table.add_row(str(k), str(v))
+            for key, value in item.items():
+                table.add_row(str(key), str(value))
 
-            logger.rich(
-                "INFO",
-                Panel(
-                    f"Complex item {item['id']} requires special handling",
-                    border_style="yellow",
-                ),
-                table,
-                title=f"Complex Item {item['id']}",
+            logger.info(
+                "Complex item %s requires special handling",
+                item["id"],
+                extra={
+                    "renderables": (
+                        Panel(
+                            f"Complex item {item['id']} requires special handling",
+                            border_style="yellow",
+                        ),
+                        table,
+                    )
+                },
             )
 
-            # Simulate additional processing for complex items
-            time.sleep(0.2)
-
-        # Simulate occasional errors
-        if random.random() < 0.1:  # 10% chance of error
+        if random.random() < 0.1:
             raise ValueError(f"Error processing item {item['id']}")
 
-        # Return the processed result
         result = {
             "id": item["id"],
             "original": item["content"],
-            "processed": item["content"][::-1],  # Just reverse the string for demo
+            "processed": item["content"][::-1],
             "process_id": os.getpid(),
             "success": True,
         }
-
-        logger.debug(f"Successfully processed item {item['id']}")
+        logger.debug("Successfully processed item %s", item["id"])
         return result
-
-    except Exception as e:
-        logger.exception(f"Failed to process item {item['id']}")
+    except Exception:
+        logger.exception("Failed to process item %s", item["id"])
         return {
             "id": item["id"],
-            "error": str(e),
+            "error": f"Error processing item {item['id']}",
             "process_id": os.getpid(),
             "success": False,
         }
 
 
-def init_worker():
-    """Initialize each worker process in the pool."""
-    # Configure logurich for this process
-    logger.configure_child_logger(logger)
-
-    # Add process-specific context
-    pid = os.getpid()
-    global_context_set(
-        worker=logger.ctx(f"Worker-{pid}", style="magenta", show_key=True)
-    )
-
-    logger.info(f"Worker process {pid} initialized")
+def worker_entry(item):
+    return process_item(item)
 
 
 def main():
-    # Initialize the logger with rich handler
-    init_logger("INFO", log_verbose=2, rich_handler=False)
+    init_logger("INFO", log_verbose=2, enqueue=True)
+    log_queue = get_log_queue()
+    logger = logging.getLogger("processor.main")
 
     with global_context_configure(
-        group=logger.ctx("DataProcessor", style="green", show_key=True)
+        group=ctx("DataProcessor", style="green", show_key=True)
     ):
-        logger.rich(
-            "INFO",
-            Panel("Starting parallel data processing example", border_style="blue"),
-            title="Initialization",
+        logger.info(
+            "Starting parallel data processing example",
+            extra={
+                "renderables": (
+                    Panel(
+                        "Starting parallel data processing example",
+                        border_style="blue",
+                    ),
+                )
+            },
         )
 
-        # Generate sample data
-        num_items = 20
-        data = generate_data(num_items)
+        data = generate_data(20)
 
-        # Show data summary
         table = Table(title="Processing Queue")
         table.add_column("ID")
         table.add_column("Content")
         table.add_column("Complexity")
-
-        # Only show a sample of items if there are many
-        display_items = data[:5] if len(data) > 5 else data
-        for item in display_items:
+        for item in data[:5]:
             table.add_row(str(item["id"]), item["content"], str(item["complexity"]))
-        if len(data) > 5:
-            table.add_row("...", "...", "...")
+        table.add_row("...", "...", "...")
+        logger.info("Items to process", extra={"renderables": (table,)})
 
-        logger.rich("INFO", table, title=f"Items to Process: {num_items}")
-
-        # Create a process pool with initialized workers
-        num_processes = min(4, mp.cpu_count())
-        logger.info(f"Creating process pool with {num_processes} workers")
-
-        # Process the data in parallel
         start_time = time.time()
-        results = []
+        # Pool tasks cannot receive the queue directly under spawn, so configure
+        # child logging once when each worker process starts.
+        with mp.Pool(
+            processes=min(4, mp.cpu_count()),
+            initializer=init_worker,
+            initargs=(log_queue,),
+        ) as pool:
+            results = pool.map(worker_entry, data)
 
-        with mp.Pool(processes=num_processes, initializer=init_worker) as pool:
-            # Use apply_async for more control over the processing
-            pending_tasks = []
-            for item in data:
-                task = pool.apply_async(process_item, (item,))
-                pending_tasks.append((item["id"], task))
-
-            # Monitor and log progress
-            completed = 0
-            while pending_tasks:
-                time.sleep(0.1)  # Small delay to reduce CPU usage
-                newly_completed = []
-
-                for item_id, task in pending_tasks:
-                    if task.ready():
-                        results.append(task.get())
-                        newly_completed.append((item_id, task))
-                        completed += 1
-
-                if newly_completed:
-                    # Remove completed tasks from pending list
-                    for item in newly_completed:
-                        pending_tasks.remove(item)
-
-                    # Log progress
-                    progress_pct = (completed / num_items) * 100
-                    logger.info(
-                        f"Progress: {completed}/{num_items} items ({progress_pct:.1f}%)"
-                    )
-
-        # Process complete, summarize results
-        end_time = time.time()
-        processing_time = end_time - start_time
-
-        # Count successes and failures
-        successes = sum(1 for r in results if r["success"])
+        elapsed = time.time() - start_time
+        successes = sum(1 for result in results if result["success"])
         failures = len(results) - successes
 
-        # Create results table
         results_table = Table(title="Processing Results")
         results_table.add_column("Metric")
         results_table.add_column("Value")
-
         results_table.add_row("Total Items", str(len(results)))
         results_table.add_row("Successful", Text(str(successes), style="green bold"))
         results_table.add_row(
-            "Failed", Text(str(failures), style="red bold" if failures > 0 else "green")
+            "Failed",
+            Text(str(failures), style="red bold" if failures > 0 else "green"),
         )
-        results_table.add_row("Processing Time", f"{processing_time:.2f} seconds")
-        results_table.add_row("Items/Second", f"{num_items / processing_time:.2f}")
+        results_table.add_row("Processing Time", f"{elapsed:.2f} seconds")
 
-        # Log a sample of the results
         sample_results = Table(title="Sample Results")
         sample_results.add_column("ID")
-        sample_results.add_column("Original")
-        sample_results.add_column("Processed")
-        sample_results.add_column("Process ID")
         sample_results.add_column("Status")
-
+        sample_results.add_column("Process ID")
         for result in results[:5]:
             status_style = "green" if result["success"] else "red"
             status_text = "Success" if result["success"] else "Failed"
+            sample_results.add_row(
+                str(result["id"]),
+                Text(status_text, style=status_style),
+                str(result["process_id"]),
+            )
 
-            if result["success"]:
-                sample_results.add_row(
-                    str(result["id"]),
-                    result["original"],
-                    result["processed"],
-                    str(result["process_id"]),
-                    Text(status_text, style=status_style),
-                )
-            else:
-                sample_results.add_row(
-                    str(result["id"]),
-                    "N/A",
-                    "N/A",
-                    str(result["process_id"]),
-                    Text(f"{status_text}: {result['error']}", style=status_style),
-                )
-
-        # Log summary with rich logging
-        logger.rich(
-            "INFO",
-            results_table,
-            sample_results if results else None,
-            title="Processing Summary",
+        logger.info(
+            "Processing summary",
+            extra={"renderables": (results_table, sample_results)},
         )
 
-        # Final status message
-        status = (
-            "SUCCESS"
-            if failures == 0
-            else "WARNING"
-            if failures < num_items * 0.2
-            else "ERROR"
-        )
-        message = (
-            "All items processed successfully"
-            if failures == 0
-            else f"Completed with {failures} failures"
-            if failures > 0
-            else ""
-        )
-
-        logger.rich(
-            status,
-            Panel(
-                message,
-                border_style="green"
-                if failures == 0
-                else "yellow"
-                if failures < num_items * 0.2
-                else "red",
-            ),
-            title="Process Complete",
-        )
+    shutdown_logger()
 
 
 if __name__ == "__main__":
-    # Set the start method for multiprocessing
     mp.set_start_method("spawn", force=True)
     main()

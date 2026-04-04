@@ -12,9 +12,9 @@ def main(name: str, count: int) -> None:
     """Demonstrate automatic logger wiring inside a Click command."""
 
     for _ in range(count):
-        logger.info("Hello {}", name)
+        logger.info("Hello %s", name)
 
-    logger.success("Completed {} greetings", count)
+    logger.info("Completed %s greetings", count)
 
 
 if __name__ == "__main__":
