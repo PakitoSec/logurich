@@ -1,6 +1,6 @@
 [project]
 name = "logurich"
-version = "0.8.2"
+version = "0.8.3"
 description = "A Python library combining standard logging and Rich for beautiful logging."
 authors = [
     { name = "PakitoSec", email = "jeromep83@gmail.com" }

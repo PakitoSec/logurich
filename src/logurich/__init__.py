@@ -1,6 +1,6 @@
 """Public package exports for logurich."""
 
-__version__ = "0.8.2"
+__version__ = "0.8.3"
 
 from .console import (
     console,
