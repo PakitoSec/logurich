@@ -154,7 +154,9 @@ def test_logurich_serialize_rich_payload_goes_to_text(monkeypatch, buffer):
     payload = json.loads(buffer.getvalue().splitlines()[0])
     assert "Rich payload" in payload["text"]
     assert "Panel content" in payload["text"]
-    assert payload["record"]["message"] == "Rich payload"
+    assert payload["record"]["message"].startswith("Rich payload\n")
+    assert "Panel content" in payload["record"]["message"]
+    assert not payload["record"]["message"].endswith("\n")
     assert "rendered" not in payload["record"]
 
 

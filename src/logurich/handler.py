@@ -129,12 +129,19 @@ class LogurichRenderer:
         exception_data = getattr(record, "exception_data", None)
         file_path = str(Path(record.pathname))
         elapsed_seconds = perf_counter() - SERIALIZATION_START
+        renderables = self._renderables(record)
+        message_value = record.getMessage()
+        if renderables and text:
+            lines = text.splitlines()
+            continuation = "\n".join(lines[1:])
+            if continuation:
+                message_value = f"{message_value}\n{continuation}"
         payload = {
             "text": rendered_text,
             "record": {
                 "elapsed": {
                     "repr": str(timedelta(seconds=elapsed_seconds)),
-                    "seconds": elapsed_seconds,
+                    "seconds": round(elapsed_seconds, 6),
                 },
                 "exception": exception_data,
                 "extra": extra,
@@ -148,7 +155,7 @@ class LogurichRenderer:
                     "no": record.levelno,
                 },
                 "line": record.lineno,
-                "message": record.getMessage(),
+                "message": message_value,
                 "module": record.module,
                 "name": record.name,
                 "process": {
@@ -165,7 +172,7 @@ class LogurichRenderer:
                 },
             },
         }
-        return json.dumps(payload, default=str)
+        return json.dumps(payload, default=str, ensure_ascii=False)
 
     def _serialize_extra(self, record: LogRecord) -> dict[str, Any]:
         context = getattr(record, "context", {}) or {}

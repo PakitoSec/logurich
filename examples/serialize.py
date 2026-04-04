@@ -27,7 +27,7 @@ if __name__ == "__main__":
         retention=None,
     )
 
-    logger.info("Basic serialized message")
+    logger.info("Basic serialized message", extra={"user": "alice", "action": "test"})
 
     with global_context_configure(request_id=ctx("req-42", show_key=True)):
         logger.info("Message with scoped context")
