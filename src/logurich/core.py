@@ -222,6 +222,12 @@ else:
                     bound_context[normalized_key] = coerced
             return BoundLogger(self, bound_context)
 
+        def contextualize(
+            self, **kwargs: Any
+        ) -> contextlib.AbstractContextManager[None]:
+            """Temporarily configure scoped context for this execution context."""
+            return global_context_configure(**kwargs)
+
 
 class BoundLogger(logging.LoggerAdapter):
     """Logger adapter that carries pre-bound context on every log call."""
@@ -295,6 +301,10 @@ class BoundLogger(logging.LoggerAdapter):
                 new_context[normalized_key] = coerced
         return BoundLogger(self, new_context)
 
+    def contextualize(self, **kwargs: Any) -> contextlib.AbstractContextManager[None]:
+        """Temporarily configure scoped context for this execution context."""
+        return global_context_configure(**kwargs)
+
     # -- adapter plumbing --------------------------------------------------
 
     def process(self, msg: Any, kwargs: Any) -> tuple[Any, Any]:
@@ -317,6 +327,7 @@ def _install_logger_class() -> None:
     logging.RootLogger.ctx = LogurichLogger.ctx
     logging.RootLogger.rich = LogurichLogger.rich
     logging.RootLogger.bind = LogurichLogger.bind
+    logging.RootLogger.contextualize = LogurichLogger.contextualize
 
     for existing in logging.Logger.manager.loggerDict.values():
         if isinstance(existing, logging.PlaceHolder):

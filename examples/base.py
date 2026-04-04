@@ -1,7 +1,7 @@
 from rich.panel import Panel
 from rich.table import Table
 
-from logurich import ctx, global_context_configure, init_logger, logger, shutdown_logger
+from logurich import ctx, init_logger, logger, shutdown_logger
 
 
 def create_rich_table() -> Table:
@@ -28,7 +28,7 @@ if __name__ == "__main__":
         },
     )
 
-    with global_context_configure(app=ctx("example", style="yellow")):
+    with logger.contextualize(app=logger.ctx("example", style="yellow")):
         logger.info("This log has app context")
 
     logger.info(

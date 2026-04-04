@@ -18,7 +18,7 @@ pip install logurich[click]
 ```python
 from rich.panel import Panel
 
-from logurich import global_context_configure, init_logger, logger, shutdown_logger
+from logurich import init_logger, logger, shutdown_logger
 
 init_logger("INFO", enqueue=False)
 
@@ -34,7 +34,7 @@ logger.info(
     },
 )
 
-with global_context_configure(app=logger.ctx("demo", style="yellow")):
+with logger.contextualize(app=logger.ctx("demo", style="yellow")):
     logger.info("This log has scoped context")
 
 logger.info(
@@ -49,7 +49,7 @@ logger.info(
 shutdown_logger()
 ```
 
-`logger.ctx(...)` is shorthand for the existing module-level `ctx(...)` helper. The module-level helper remains supported if you prefer `extra={"context": {"key": ctx(...)}}`.
+`logger.ctx(...)` is shorthand for the existing module-level `ctx(...)` helper. `logger.contextualize(...)` is a convenience alias for `global_context_configure(...)`. The module-level helpers remain supported if you prefer `global_context_configure(...)` or `extra={"context": {"key": ctx(...)}}`.
 
 ## Using Logurich in Reusable Libraries
 

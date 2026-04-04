@@ -90,6 +90,19 @@ def test_global_context_configure_restores_previous(logger, buffer):
     [{"level": "DEBUG", "enqueue": False}, {"level": "DEBUG", "enqueue": True}],
     indirect=True,
 )
+def test_logger_contextualize_alias(logger, buffer):
+    with logger.contextualize(exec_id=logger.ctx("id_123", style="yellow")):
+        logger.info("Hello, world!")
+        logger.debug("Debug, world!")
+    shutdown_logger()
+    assert all("id_123" in line for line in buffer.getvalue().splitlines() if line)
+
+
+@pytest.mark.parametrize(
+    "logger",
+    [{"level": "DEBUG", "enqueue": False}, {"level": "DEBUG", "enqueue": True}],
+    indirect=True,
+)
 def test_per_call_context_via_extra(logger, buffer):
     logger.info(
         "bound message",
@@ -153,6 +166,20 @@ def test_root_logger_ctx_value_renders(buffer):
             }
         },
     )
+    shutdown_logger()
+
+    output = buffer.getvalue()
+    assert "app=root-app" in output
+
+
+def test_root_logger_contextualize(buffer):
+    init_logger("INFO", enqueue=False)
+
+    root_logger = logging.getLogger()
+    with root_logger.contextualize(
+        app=root_logger.ctx("root-app", style="cyan", show_key=True)
+    ):
+        root_logger.info("root logger context")
     shutdown_logger()
 
     output = buffer.getvalue()
@@ -370,6 +397,25 @@ def test_bind_with_global_context(logger, buffer):
     output = buffer.getvalue()
     assert "global_key=global_val" in output
     assert "bound_key=bound_val" in output
+
+
+@pytest.mark.parametrize(
+    "logger",
+    [{"level": "DEBUG", "enqueue": False}, {"level": "DEBUG", "enqueue": True}],
+    indirect=True,
+)
+def test_bound_logger_contextualize_with_bound_context(logger, buffer):
+    bound = logger.bind(module=ctx("PM-API", style="magenta", show_key=True))
+
+    with bound.contextualize(
+        request_id=bound.ctx("req-42", style="cyan", show_key=True)
+    ):
+        bound.info("merged")
+    shutdown_logger()
+
+    output = buffer.getvalue()
+    assert "module=PM-API" in output
+    assert "request_id=req-42" in output
 
 
 def test_bound_logger_ctx_method(buffer):
