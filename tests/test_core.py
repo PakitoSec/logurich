@@ -178,6 +178,22 @@ def test_logurich_serialize_exception_object(monkeypatch, buffer):
     assert "Failed" in payload["text"]
 
 
+def test_logurich_serialize_stdlib_extra_payload(monkeypatch, buffer):
+    monkeypatch.setenv("LOGURICH_SERIALIZE", "1")
+    init_logger("INFO", enqueue=False)
+
+    logging.getLogger("serialize.extra").info(
+        "Serialized extra",
+        extra={"user": "alice", "action": "test"},
+    )
+    shutdown_logger()
+
+    payload = json.loads(buffer.getvalue().splitlines()[0])
+    assert payload["record"]["message"] == "Serialized extra"
+    assert payload["record"]["extra"]["user"] == "alice"
+    assert payload["record"]["extra"]["action"] == "test"
+
+
 def test_level_by_module_filters_named_loggers(buffer):
     init_logger(
         "INFO",

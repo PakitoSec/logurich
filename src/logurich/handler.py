@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timedelta
 from logging import Formatter, Handler, LogRecord
 from pathlib import Path
@@ -24,6 +25,22 @@ if TYPE_CHECKING:
 
 DEFAULT_CONTENT_PADDING = (0, 10, 22, 25)
 SERIALIZATION_START = perf_counter()
+STANDARD_LOG_RECORD_ATTRS = frozenset(logging.makeLogRecord({}).__dict__)
+LOGURICH_INTERNAL_RECORD_ATTRS = frozenset(
+    {
+        "_logurich_prepared",
+        "context",
+        "end",
+        "exception_data",
+        "formatted_exception",
+        "message",
+        "render_prefix",
+        "render_width",
+        "renderables",
+        "rich_highlight",
+        "rich_traceback",
+    }
+)
 
 
 def _safe_text_from_markup(value: str) -> Text:
@@ -177,6 +194,15 @@ class LogurichRenderer:
     def _serialize_extra(self, record: LogRecord) -> dict[str, Any]:
         context = getattr(record, "context", {}) or {}
         serialized = dict(logger_state.get("env_extra", {}))
+        user_extra = {
+            key: value
+            for key, value in record.__dict__.items()
+            if key not in STANDARD_LOG_RECORD_ATTRS
+            and key not in LOGURICH_INTERNAL_RECORD_ATTRS
+            and not key.startswith("_logurich_")
+        }
+        if user_extra:
+            serialized.update(user_extra)
         serialized.update(
             {
                 _context_display_name(key): getattr(value, "value", value)
