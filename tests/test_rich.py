@@ -70,6 +70,7 @@ def test_named_stdlib_logger_has_rich_method(buffer):
     init_logger("INFO", enqueue=False)
 
     named_logger = logging.getLogger("pkg.worker")
+    assert hasattr(named_logger, "ctx")
     assert hasattr(named_logger, "rich")
 
     named_logger.rich("INFO", "named body", title="Named title")
@@ -84,6 +85,7 @@ def test_root_logger_has_rich_method(buffer):
     init_logger("INFO", enqueue=False)
 
     root_logger = logging.getLogger()
+    assert hasattr(root_logger, "ctx")
     assert hasattr(root_logger, "rich")
 
     root_logger.rich("INFO", "root body", title="Root title")

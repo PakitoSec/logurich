@@ -31,13 +31,16 @@ def generate_data(num_items):
     ]
 
 
-def process_item(log_queue, item):
+def init_worker(log_queue):
     configure_child_logging(log_queue)
-    log = logging.getLogger("processor.worker")
+
+
+def process_item(item):
+    logger = logging.getLogger("processor.worker")
     global_context_set(item=ctx(str(item["id"]), label="item", style="cyan"))
 
     try:
-        log.info("Processing item %s", item["id"])
+        logger.info("Processing item %s", item["id"])
         time.sleep(item["complexity"] * 0.1)
 
         if item["complexity"] > 7:
@@ -47,7 +50,7 @@ def process_item(log_queue, item):
             for key, value in item.items():
                 table.add_row(str(key), str(value))
 
-            log.info(
+            logger.info(
                 "Complex item %s requires special handling",
                 item["id"],
                 extra={
@@ -71,10 +74,10 @@ def process_item(log_queue, item):
             "process_id": os.getpid(),
             "success": True,
         }
-        log.debug("Successfully processed item %s", item["id"])
+        logger.debug("Successfully processed item %s", item["id"])
         return result
     except Exception:
-        log.exception("Failed to process item %s", item["id"])
+        logger.exception("Failed to process item %s", item["id"])
         return {
             "id": item["id"],
             "error": f"Error processing item {item['id']}",
@@ -83,19 +86,19 @@ def process_item(log_queue, item):
         }
 
 
-def worker_entry(log_queue, item):
-    return process_item(log_queue, item)
+def worker_entry(item):
+    return process_item(item)
 
 
 def main():
     init_logger("INFO", log_verbose=2, enqueue=True)
     log_queue = get_log_queue()
-    log = logging.getLogger("processor.main")
+    logger = logging.getLogger("processor.main")
 
     with global_context_configure(
         group=ctx("DataProcessor", style="green", show_key=True)
     ):
-        log.info(
+        logger.info(
             "Starting parallel data processing example",
             extra={
                 "renderables": (
@@ -116,11 +119,17 @@ def main():
         for item in data[:5]:
             table.add_row(str(item["id"]), item["content"], str(item["complexity"]))
         table.add_row("...", "...", "...")
-        log.info("Items to process", extra={"renderables": (table,)})
+        logger.info("Items to process", extra={"renderables": (table,)})
 
         start_time = time.time()
-        with mp.Pool(processes=min(4, mp.cpu_count())) as pool:
-            results = pool.starmap(worker_entry, [(log_queue, item) for item in data])
+        # Pool tasks cannot receive the queue directly under spawn, so configure
+        # child logging once when each worker process starts.
+        with mp.Pool(
+            processes=min(4, mp.cpu_count()),
+            initializer=init_worker,
+            initargs=(log_queue,),
+        ) as pool:
+            results = pool.map(worker_entry, data)
 
         elapsed = time.time() - start_time
         successes = sum(1 for result in results if result["success"])
@@ -150,7 +159,7 @@ def main():
                 str(result["process_id"]),
             )
 
-        log.info(
+        logger.info(
             "Processing summary",
             extra={"renderables": (results_table, sample_results)},
         )

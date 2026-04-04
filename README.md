@@ -18,7 +18,7 @@ pip install logurich[click]
 ```python
 from rich.panel import Panel
 
-from logurich import ctx, global_context_configure, init_logger, logger, shutdown_logger
+from logurich import global_context_configure, init_logger, logger, shutdown_logger
 
 init_logger("INFO", enqueue=False)
 
@@ -34,16 +34,22 @@ logger.info(
     },
 )
 
-with global_context_configure(app=ctx("demo", style="yellow")):
+with global_context_configure(app=logger.ctx("demo", style="yellow")):
     logger.info("This log has scoped context")
 
 logger.info(
     "Per-call context",
-    extra={"context": {"session": ctx("sess-42", style="cyan", show_key=True)}},
+    extra={
+        "context": {
+            "session": logger.ctx("sess-42", style="cyan", show_key=True),
+        }
+    },
 )
 
 shutdown_logger()
 ```
+
+`logger.ctx(...)` is shorthand for the existing module-level `ctx(...)` helper. The module-level helper remains supported if you prefer `extra={"context": {"key": ctx(...)}}`.
 
 ## Using Logurich in Reusable Libraries
 
@@ -97,7 +103,7 @@ Guidelines for libraries:
 - Use `logging.getLogger(__name__)` inside library modules.
 - Do not call `init_logger()` or `shutdown_logger()` from library code.
 - Emit normal stdlib log calls such as `logger.info("Value %s", value)`.
-- Use `extra={"context": ...}` and `extra={"renderables": ...}` only as optional metadata; they render nicely when the consuming application uses Logurich.
+- Use `extra={"context": ...}` and `extra={"renderables": ...}` only as optional metadata; they render nicely when the consuming application uses Logurich, and `logger.ctx(...)` / `logger.rich(...)` are also available when Logurich has been imported/configured by the application.
 - If the library starts worker processes and the application uses `enqueue=True`, accept the queue from the application and call `configure_child_logging(queue)` inside each worker process.
 
 ## Multiprocessing

@@ -11,6 +11,9 @@ from logurich import (
     init_logger,
     shutdown_logger,
 )
+from logurich import (
+    logger as exported_logger,
+)
 
 
 @pytest.mark.parametrize(
@@ -109,6 +112,48 @@ def test_global_context_set(logger, buffer):
     logger.debug("Debug, world!")
     shutdown_logger()
     assert all("id_123" in line for line in buffer.getvalue().splitlines() if line)
+
+
+def test_logger_ctx_matches_module_helper():
+    assert exported_logger.ctx("demo", style="yellow", show_key=True) == ctx(
+        "demo", style="yellow", show_key=True
+    )
+
+
+def test_named_logger_ctx_value_renders(buffer):
+    init_logger("INFO", enqueue=False)
+
+    named_logger = logging.getLogger("pkg.worker")
+    named_logger.info(
+        "named logger context",
+        extra={
+            "context": {
+                "module": named_logger.ctx("MDI-API", style="yellow", show_key=True),
+            }
+        },
+    )
+    shutdown_logger()
+
+    output = buffer.getvalue()
+    assert "module=MDI-API" in output
+
+
+def test_root_logger_ctx_value_renders(buffer):
+    init_logger("INFO", enqueue=False)
+
+    root_logger = logging.getLogger()
+    root_logger.info(
+        "root logger context",
+        extra={
+            "context": {
+                "app": root_logger.ctx("root-app", style="cyan", show_key=True),
+            }
+        },
+    )
+    shutdown_logger()
+
+    output = buffer.getvalue()
+    assert "app=root-app" in output
 
 
 @pytest.mark.parametrize(

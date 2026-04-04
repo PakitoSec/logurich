@@ -172,6 +172,25 @@ else:
 
         _logurich_logger_class = True
 
+        def ctx(
+            self,
+            value: Any,
+            *,
+            style: Optional[str] = None,
+            value_style: Optional[str] = None,
+            bracket_style: Optional[str] = None,
+            label: Optional[str] = None,
+            show_key: Optional[bool] = None,
+        ) -> ContextValue:
+            return ctx(
+                value,
+                style=style,
+                value_style=value_style,
+                bracket_style=bracket_style,
+                label=label,
+                show_key=show_key,
+            )
+
         def rich(
             self,
             log_level: Union[str, int],
@@ -196,6 +215,7 @@ else:
 
 def _install_logger_class() -> None:
     logging.setLoggerClass(LogurichLogger)
+    logging.RootLogger.ctx = LogurichLogger.ctx
     logging.RootLogger.rich = LogurichLogger.rich
 
     for existing in logging.Logger.manager.loggerDict.values():

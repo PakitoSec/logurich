@@ -18,11 +18,11 @@ from logurich import (
 
 def worker_function(log_queue, worker_id):
     configure_child_logging(log_queue)
-    log = logging.getLogger(f"workers.{worker_id}")
+    logger = logging.getLogger(f"workers.{worker_id}")
 
     with global_context_configure(worker=ctx(f"Worker-{worker_id}", show_key=True)):
-        log.info("Worker %s starting", worker_id)
-        log.debug("Worker %s debug message", worker_id)
+        logger.info("Worker %s starting", worker_id)
+        logger.debug("Worker %s debug message", worker_id)
 
         table = Table(title=f"Worker {worker_id} Stats")
         table.add_column("Metric")
@@ -30,7 +30,7 @@ def worker_function(log_queue, worker_id):
         table.add_row("Process ID", str(mp.current_process().pid))
         table.add_row("Random Value", str(random.randint(1, 100)))
 
-        log.info(
+        logger.info(
             "Worker %s status",
             worker_id,
             extra={
@@ -45,10 +45,10 @@ def worker_function(log_queue, worker_id):
         )
 
         for i in range(3):
-            log.info("Worker %s step %s/3", worker_id, i + 1)
+            logger.info("Worker %s step %s/3", worker_id, i + 1)
             time.sleep(random.uniform(0.1, 0.5))
 
-        log.info(
+        logger.info(
             "Worker %s completed successfully",
             worker_id,
             extra={

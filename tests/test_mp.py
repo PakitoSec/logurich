@@ -1,5 +1,10 @@
 import logging
 import multiprocessing as mp
+import os
+import subprocess
+import sys
+import textwrap
+from pathlib import Path
 
 from rich.panel import Panel
 from rich.table import Table
@@ -84,3 +89,68 @@ def test_rich_logging_in_child_process(buffer):
     assert "Value 1" in output
     assert "Value 2" in output
     assert "Rich Test" in output
+
+
+def test_spawn_pool_initializer_can_configure_child_logging(tmp_path):
+    repo_root = Path(__file__).resolve().parents[1]
+    script_path = tmp_path / "spawn_pool_logging.py"
+    script_path.write_text(
+        textwrap.dedent(
+            """
+            import logging
+            import multiprocessing as mp
+
+            from logurich import (
+                configure_child_logging,
+                get_log_queue,
+                init_logger,
+                shutdown_logger,
+            )
+
+
+            def init_worker(log_queue):
+                configure_child_logging(log_queue)
+
+
+            def process_item(item):
+                logging.getLogger("workers.pool").info("Pool item %s", item)
+                return item * 2
+
+
+            def main():
+                init_logger("INFO", enqueue=True)
+                log_queue = get_log_queue()
+                try:
+                    with mp.Pool(
+                        processes=2,
+                        initializer=init_worker,
+                        initargs=(log_queue,),
+                    ) as pool:
+                        results = pool.map(process_item, [1, 2, 3])
+                    assert results == [2, 4, 6]
+                finally:
+                    shutdown_logger()
+
+
+            if __name__ == "__main__":
+                mp.set_start_method("spawn", force=True)
+                main()
+            """
+        )
+    )
+    env = os.environ.copy()
+    pythonpath = str(repo_root / "src")
+    if env.get("PYTHONPATH"):
+        pythonpath = f"{pythonpath}{os.pathsep}{env['PYTHONPATH']}"
+    env["PYTHONPATH"] = pythonpath
+
+    result = subprocess.run(
+        [sys.executable, str(script_path)],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
