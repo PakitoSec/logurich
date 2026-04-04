@@ -1,11 +1,15 @@
 import json
+import logging
 
 import pytest
+from rich.panel import Panel
 
 from logurich import (
+    ctx,
     global_context_configure,
     global_context_set,
     init_logger,
+    shutdown_logger,
 )
 
 
@@ -15,11 +19,12 @@ from logurich import (
     indirect=True,
 )
 def test_level_info(logger, buffer):
-    logger.info("Hello, world!")
+    logger.info("Hello, %s!", "world")
     logger.debug("Debug, world!")
-    logger.complete()
-    assert "Hello, world!" in buffer.getvalue()
-    assert "Debug, world" not in buffer.getvalue()
+    shutdown_logger()
+    output = buffer.getvalue()
+    assert "Hello, world!" in output
+    assert "Debug, world!" not in output
 
 
 @pytest.mark.parametrize(
@@ -28,27 +33,12 @@ def test_level_info(logger, buffer):
     indirect=True,
 )
 def test_level_debug(logger, buffer):
-    logger.info("Hello, world!")
+    logger.info("Hello, %s!", "world")
     logger.debug("Debug, world!")
-    logger.complete()
-    assert "Hello, world!" in buffer.getvalue().splitlines()[0]
-    assert "Debug, world" in buffer.getvalue().splitlines()[1]
-
-
-@pytest.mark.parametrize(
-    "logger",
-    [
-        {"level": "DEBUG", "enqueue": False, "verbose": 3},
-        {"level": "DEBUG", "enqueue": True, "verbose": 3},
-    ],
-    indirect=True,
-)
-def test_level_debug_verbose(logger, buffer):
-    logger.info("Hello, world!")
-    logger.debug("Debug, world!")
-    logger.complete()
-    assert "Hello, world!" in buffer.getvalue().splitlines()[0]
-    assert "Debug, world" in buffer.getvalue().splitlines()[1]
+    shutdown_logger()
+    lines = [line for line in buffer.getvalue().splitlines() if line.strip()]
+    assert "Hello, world!" in lines[0]
+    assert "Debug, world!" in lines[1]
 
 
 @pytest.mark.parametrize(
@@ -56,27 +46,28 @@ def test_level_debug_verbose(logger, buffer):
     [{"level": "DEBUG", "enqueue": False}, {"level": "DEBUG", "enqueue": True}],
     indirect=True,
 )
-def test_global_configure(logger, buffer):
-    with global_context_configure(exec_id=logger.ctx("id_123", style="yellow")):
+def test_global_context_configure(logger, buffer):
+    with global_context_configure(exec_id=ctx("id_123", style="yellow")):
         logger.info("Hello, world!")
         logger.debug("Debug, world!")
-        logger.complete()
-        assert all("id_123" in log for log in buffer.getvalue().splitlines())
+    shutdown_logger()
+    assert all("id_123" in line for line in buffer.getvalue().splitlines() if line)
 
 
 @pytest.mark.parametrize(
     "logger",
-    [{"level": "DEBUG", "enqueue": False}, {"level": "DEBUG", "enqueue": True}],
+    [{"level": "DEBUG", "enqueue": False}],
     indirect=True,
 )
-def test_global_configure_restores_previous(logger, buffer):
-    with global_context_configure(exec_id=logger.ctx("outer_ctx", style="yellow")):
+def test_global_context_configure_restores_previous(logger, buffer):
+    with global_context_configure(exec_id=ctx("outer_ctx", style="yellow")):
         logger.info("outer message")
-        with global_context_configure(exec_id=logger.ctx("inner_ctx", style="cyan")):
+        with global_context_configure(exec_id=ctx("inner_ctx", style="cyan")):
             logger.info("inner message")
         logger.info("outer message again")
     logger.info("plain message")
-    logger.complete()
+    shutdown_logger()
+
     log_lines = [line for line in buffer.getvalue().splitlines() if line.strip()]
     assert "outer_ctx" in log_lines[0]
     assert "inner_ctx" not in log_lines[0]
@@ -93,12 +84,18 @@ def test_global_configure_restores_previous(logger, buffer):
     [{"level": "DEBUG", "enqueue": False}, {"level": "DEBUG", "enqueue": True}],
     indirect=True,
 )
-def test_with_configure(logger, buffer):
-    with logger.contextualize(exec_id=logger.ctx("task-id", style="yellow")):
-        logger.info("Hello, world!")
-        logger.debug("Debug, world!")
-    logger.complete()
-    assert all("task-id" in log for log in buffer.getvalue().splitlines())
+def test_per_call_context_via_extra(logger, buffer):
+    logger.info(
+        "bound message",
+        extra={
+            "context": {
+                "session": ctx("sess-42", style="cyan", show_key=True),
+            }
+        },
+    )
+    shutdown_logger()
+    output = buffer.getvalue()
+    assert "session=sess-42" in output
 
 
 @pytest.mark.parametrize(
@@ -106,77 +103,111 @@ def test_with_configure(logger, buffer):
     [{"level": "DEBUG", "enqueue": False}, {"level": "DEBUG", "enqueue": True}],
     indirect=True,
 )
-def test_set_context(logger, buffer):
-    global_context_set(exec_id=logger.ctx("id_123", style="yellow"))
+def test_global_context_set(logger, buffer):
+    global_context_set(exec_id=ctx("id_123", style="yellow"))
     logger.info("Hello, world!")
     logger.debug("Debug, world!")
-    logger.complete()
-    assert all("id_123" in log for log in buffer.getvalue().splitlines())
-    global_context_set(exec_id=None)
+    shutdown_logger()
+    assert all("id_123" in line for line in buffer.getvalue().splitlines() if line)
 
 
 @pytest.mark.parametrize(
-    "level, enqueue",
-    [
-        ("DEBUG", False),
-        ("DEBUG", True),
-    ],
+    "enqueue",
+    [False, True],
 )
-def test_loguru_serialize_env(monkeypatch, logger, level, enqueue, buffer):
-    monkeypatch.setenv("LOGURU_SERIALIZE", "1")
-    init_logger(level, enqueue=enqueue)
-    logger.info("Serialized {}", "output")
-    logger.complete()
+def test_logurich_serialize_env(monkeypatch, enqueue, buffer):
+    monkeypatch.setenv("LOGURICH_SERIALIZE", "1")
+    monkeypatch.setenv("LOGURICH_EXTRA_APP", "serialize-test")
+    init_logger("DEBUG", enqueue=enqueue)
+    logging.getLogger("serialize.test").info(
+        "Serialized %s",
+        "output",
+        extra={"context": {"request_id": ctx("req-42")}},
+    )
+    shutdown_logger()
+
     log_lines = [line for line in buffer.getvalue().splitlines() if line.strip()]
     assert log_lines, "No serialized output captured"
     payload = json.loads(log_lines[0])
+    assert "Serialized output" in payload["text"]
+    assert payload["text"].endswith("\n")
     assert payload["record"]["message"] == "Serialized output"
+    assert payload["record"]["level"]["name"] == "INFO"
+    assert payload["record"]["level"]["no"] == logging.INFO
+    assert payload["record"]["name"] == "serialize.test"
+    assert payload["record"]["extra"]["APP"] == "serialize-test"
+    assert payload["record"]["extra"]["request_id"] == "req-42"
+    assert payload["record"]["exception"] is None
 
 
-@pytest.mark.parametrize(
-    "logger",
-    [{"level": "DEBUG", "enqueue": False}],
-    indirect=True,
-)
-def test_logger_ctx_in_bind(logger, buffer):
-    """logger.ctx() should work seamlessly with logger.bind()."""
-    logger.bind(session=logger.ctx("sess-42", style="cyan")).info("bound message")
-    logger.complete()
-    assert "sess-42" in buffer.getvalue()
+def test_logurich_serialize_rich_payload_goes_to_text(monkeypatch, buffer):
+    monkeypatch.setenv("LOGURICH_SERIALIZE", "1")
+    init_logger("INFO", enqueue=False)
+
+    logging.getLogger("serialize.rich").rich(
+        "INFO",
+        Panel("Panel content", border_style="green"),
+        title="Rich payload",
+    )
+    shutdown_logger()
+
+    payload = json.loads(buffer.getvalue().splitlines()[0])
+    assert "Rich payload" in payload["text"]
+    assert "Panel content" in payload["text"]
+    assert payload["record"]["message"] == "Rich payload"
+    assert "rendered" not in payload["record"]
 
 
-@pytest.mark.parametrize(
-    "logger",
-    [{"level": "DEBUG", "enqueue": False}],
-    indirect=True,
-)
-def test_set_level_filters_messages(logger, buffer):
-    """level_set() should temporarily raise the minimum log level."""
-    logger.debug("before level_set")
-    logger.level_set("WARNING")
-    logger.debug("should be filtered")
-    logger.info("also filtered")
-    logger.warning("should appear")
-    logger.complete()
+def test_logurich_serialize_exception_object(monkeypatch, buffer):
+    monkeypatch.setenv("LOGURICH_SERIALIZE", "1")
+    init_logger("INFO", enqueue=False)
+
+    try:
+        raise ValueError("boom")
+    except ValueError:
+        logging.getLogger("serialize.exc").exception("Failed")
+
+    shutdown_logger()
+
+    payload = json.loads(buffer.getvalue().splitlines()[0])
+    assert payload["record"]["exception"]["type"] == "ValueError"
+    assert payload["record"]["exception"]["value"] == "boom"
+    assert "ValueError: boom" in payload["record"]["exception"]["traceback"]
+    assert "Failed" in payload["text"]
+
+
+def test_level_by_module_filters_named_loggers(buffer):
+    init_logger(
+        "INFO",
+        enqueue=False,
+        level_by_module={"pkg.worker": "DEBUG"},
+    )
+    worker_logger = logging.getLogger("pkg.worker")
+    other_logger = logging.getLogger("pkg.other")
+
+    worker_logger.debug("worker debug")
+    other_logger.debug("other debug")
+    worker_logger.info("worker info")
+    shutdown_logger()
+
     output = buffer.getvalue()
-    assert "before level_set" in output
-    assert "should be filtered" not in output
-    assert "also filtered" not in output
-    assert "should appear" in output
+    assert "worker debug" in output
+    assert "worker info" in output
+    assert "other debug" not in output
 
 
 @pytest.mark.parametrize(
     "logger",
-    [{"level": "DEBUG", "enqueue": False}],
+    [{"level": "DEBUG", "enqueue": False}, {"level": "DEBUG", "enqueue": True}],
     indirect=True,
 )
-def test_restore_level_resets_filtering(logger, buffer):
-    """level_restore() should reset the log level to the original."""
-    logger.level_set("ERROR")
-    logger.warning("filtered warning")
-    logger.level_restore()
-    logger.debug("after restore")
-    logger.complete()
+def test_exception_logging_preserves_traceback(logger, buffer):
+    try:
+        raise ZeroDivisionError("boom")
+    except ZeroDivisionError:
+        logger.exception("Computation failed")
+
+    shutdown_logger()
     output = buffer.getvalue()
-    assert "filtered warning" not in output
-    assert "after restore" in output
+    assert "Computation failed" in output
+    assert "ZeroDivisionError" in output

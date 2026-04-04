@@ -19,7 +19,6 @@ LOGGER_PARAM_NAMES = (
     "logger_verbose",
     "logger_filename",
     "logger_level_by_module",
-    "logger_diagnose",
     "logger_rich",
 )
 
@@ -34,7 +33,6 @@ def click_logger_params(func: F) -> F:
     - ``-v, --logger-verbose``: Increase verbosity (can be used multiple times)
     - ``--logger-filename``: Enable file logging with specified filename
     - ``--logger-level-by-module``: Set specific log levels per module
-    - ``--logger-diagnose``: Enable Loguru diagnostic mode
     - ``--logger-rich``: Enable Rich handler for enhanced console output
 
     The decorator initializes the logger before the command function executes.
@@ -81,13 +79,6 @@ def click_logger_params(func: F) -> F:
         type=(str, str),
     )
     @click.option(
-        "--logger-diagnose",
-        is_flag=True,
-        help="Logger activate loguru diagnose",
-        type=bool,
-        default=False,
-    )
-    @click.option(
         "--logger-rich",
         is_flag=True,
         help="Enable rich handler for enhanced console output",
@@ -115,7 +106,6 @@ def click_logger_init(
     logger_verbose: int,
     logger_filename: Optional[str],
     logger_level_by_module: tuple[tuple[str, str], ...],
-    logger_diagnose: bool,
     logger_rich: bool,
 ) -> None:
     """Initialize the logger with parameters from Click CLI options.
@@ -128,7 +118,6 @@ def click_logger_init(
         logger_verbose: Verbosity level (0-3).
         logger_filename: Path to log file, or None for console-only logging.
         logger_level_by_module: Tuple of (module_name, level) pairs for per-module levels.
-        logger_diagnose: Whether to enable Loguru diagnostic mode.
         logger_rich: Whether to use Rich handler for enhanced console output.
 
     Example:
@@ -143,13 +132,11 @@ def click_logger_init(
         logger_verbose,
         log_filename=logger_filename,
         level_by_module=lbm,
-        diagnose=logger_diagnose,
         rich_handler=logger_rich,
     )
-    logger.debug("Log level:            {}", logger_level)
-    logger.debug("Log verbose:          {}", logger_verbose)
-    logger.debug("Log filename:         {}", logger_filename)
-    logger.debug("Log path:             {}", log_path)
-    logger.debug("Log level by module:  {}", lbm)
-    logger.debug("Log rich handler:     {}", logger_rich)
-    logger.debug("Log diagnose:         {}", logger_diagnose)
+    logger.debug("Log level:            %s", logger_level)
+    logger.debug("Log verbose:          %s", logger_verbose)
+    logger.debug("Log filename:         %s", logger_filename)
+    logger.debug("Log path:             %s", log_path)
+    logger.debug("Log level by module:  %s", lbm)
+    logger.debug("Log rich handler:     %s", logger_rich)
