@@ -91,6 +91,49 @@ def test_rich_logging_in_child_process(buffer):
     assert "Rich Test" in output
 
 
+def test_interpreter_exit_stops_queue_listener_without_thread_error(tmp_path):
+    repo_root = Path(__file__).resolve().parents[1]
+    script_path = tmp_path / "queue_listener_exit.py"
+    script_path.write_text(
+        textwrap.dedent(
+            """
+            import logging
+
+            from logurich import init_logger
+
+
+            def main():
+                init_logger("INFO", enqueue=True)
+                logging.getLogger("exit").info("Interpreter exit test")
+
+
+            if __name__ == "__main__":
+                main()
+            """
+        )
+    )
+
+    env = os.environ.copy()
+    pythonpath = str(repo_root / "src")
+    if env.get("PYTHONPATH"):
+        pythonpath = f"{pythonpath}{os.pathsep}{env['PYTHONPATH']}"
+    env["PYTHONPATH"] = pythonpath
+
+    result = subprocess.run(
+        [sys.executable, str(script_path)],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr or result.stdout
+    assert "Interpreter exit test" in result.stdout
+    assert "Exception in thread" not in result.stderr
+    assert "handle is closed" not in result.stderr
+
+
 def test_spawn_pool_initializer_can_configure_child_logging(tmp_path):
     repo_root = Path(__file__).resolve().parents[1]
     script_path = tmp_path / "spawn_pool_logging.py"

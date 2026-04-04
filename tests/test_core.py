@@ -1,5 +1,6 @@
 import json
 import logging
+import threading
 from types import MappingProxyType
 
 import pytest
@@ -34,11 +35,20 @@ def test_level_info(logger, buffer):
     assert "Debug, world!" not in output
 
 
-def test_init_logger_registers_atexit_shutdown_once(monkeypatch):
+def test_init_logger_registers_shutdown_hooks_once(monkeypatch):
     registered: list[object] = []
+    thread_registered: list[object] = []
+    register_threading_atexit = getattr(threading, "_register_atexit", None)
 
     monkeypatch.setitem(logger_state, "atexit_registered", False)
+    monkeypatch.setitem(logger_state, "threading_atexit_registered", False)
     monkeypatch.setattr("logurich.core.atexit.register", registered.append)
+    if register_threading_atexit is None:
+        monkeypatch.delattr("logurich.core.threading._register_atexit", raising=False)
+    else:
+        monkeypatch.setattr(
+            "logurich.core.threading._register_atexit", thread_registered.append
+        )
 
     init_logger("INFO", enqueue=False)
     shutdown_logger()
@@ -46,6 +56,10 @@ def test_init_logger_registers_atexit_shutdown_once(monkeypatch):
     shutdown_logger()
 
     assert registered == [shutdown_logger]
+    if register_threading_atexit is None:
+        assert thread_registered == []
+    else:
+        assert thread_registered == [shutdown_logger]
 
 
 @pytest.mark.parametrize(
