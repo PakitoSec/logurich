@@ -1,10 +1,12 @@
 import json
 import logging
+from types import MappingProxyType
 
 import pytest
 from rich.panel import Panel
 
 from logurich import (
+    BoundLogger,
     ctx,
     global_context_configure,
     global_context_set,
@@ -274,3 +276,159 @@ def test_exception_logging_preserves_traceback(logger, buffer):
     output = buffer.getvalue()
     assert "Computation failed" in output
     assert "ZeroDivisionError" in output
+
+
+# ── bind() tests ─────────────────────────────────────────────────────
+
+
+def test_bind_returns_bound_logger(buffer):
+    init_logger("INFO", enqueue=False)
+    bound = exported_logger.bind(module=ctx("PM-API", style="magenta"))
+    assert isinstance(bound, BoundLogger)
+    # Original logger is not a BoundLogger (not mutated).
+    assert not isinstance(exported_logger, BoundLogger)
+    shutdown_logger()
+
+
+@pytest.mark.parametrize(
+    "logger",
+    [{"level": "DEBUG", "enqueue": False}, {"level": "DEBUG", "enqueue": True}],
+    indirect=True,
+)
+def test_bind_context_appears_in_logs(logger, buffer):
+    bound = logger.bind(module=ctx("PM-API", style="magenta", show_key=True))
+    bound.info("bound message")
+    shutdown_logger()
+    output = buffer.getvalue()
+    assert "module=PM-API" in output
+
+
+@pytest.mark.parametrize(
+    "logger",
+    [{"level": "DEBUG", "enqueue": False}, {"level": "DEBUG", "enqueue": True}],
+    indirect=True,
+)
+def test_bind_chaining(logger, buffer):
+    bound = (
+        logger.bind(app=ctx("myapp", style="green", show_key=True))
+        .bind(module=ctx("PM-API", style="magenta", show_key=True))
+    )
+    bound.info("chained")
+    shutdown_logger()
+    output = buffer.getvalue()
+    assert "app=myapp" in output
+    assert "module=PM-API" in output
+
+
+@pytest.mark.parametrize(
+    "logger",
+    [{"level": "DEBUG", "enqueue": False}, {"level": "DEBUG", "enqueue": True}],
+    indirect=True,
+)
+def test_bind_per_call_overrides_bound(logger, buffer):
+    bound = logger.bind(module=ctx("PM-API", style="magenta", show_key=True))
+    bound.info(
+        "overridden",
+        extra={"context": {"module": ctx("OVERRIDE", style="cyan", show_key=True)}},
+    )
+    shutdown_logger()
+    output = buffer.getvalue()
+    assert "module=OVERRIDE" in output
+    assert "PM-API" not in output
+
+
+@pytest.mark.parametrize(
+    "logger",
+    [{"level": "DEBUG", "enqueue": False}],
+    indirect=True,
+)
+def test_bind_with_global_context(logger, buffer):
+    with global_context_configure(
+        global_key=ctx("global_val", style="yellow", show_key=True)
+    ):
+        bound = logger.bind(
+            bound_key=ctx("bound_val", style="cyan", show_key=True)
+        )
+        bound.info("merged")
+    shutdown_logger()
+    output = buffer.getvalue()
+    assert "global_key=global_val" in output
+    assert "bound_key=bound_val" in output
+
+
+def test_bound_logger_ctx_method(buffer):
+    init_logger("INFO", enqueue=False)
+    bound = exported_logger.bind(module=ctx("PM-API", style="magenta"))
+    assert bound.ctx("demo", style="yellow", show_key=True) == ctx(
+        "demo", style="yellow", show_key=True
+    )
+    shutdown_logger()
+
+
+def test_bound_logger_rich_method(buffer):
+    init_logger("INFO", enqueue=False)
+    bound = exported_logger.bind(module=ctx("PM-API", style="magenta"))
+    bound.rich("INFO", Panel("Rich from bound logger"), title="bound-rich")
+    shutdown_logger()
+    output = buffer.getvalue()
+    assert "Rich from bound logger" in output
+
+
+@pytest.mark.parametrize(
+    "logger",
+    [{"level": "DEBUG", "enqueue": False}, {"level": "DEBUG", "enqueue": True}],
+    indirect=True,
+)
+def test_bind_process_copies_reused_extra_mapping(logger):
+    shared_extra = {"context": {}}
+
+    bound_app = logger.bind(app=ctx("myapp", style="green", show_key=True))
+    _, first_kwargs = bound_app.process("first", {"extra": shared_extra})
+
+    bound_module = logger.bind(module=ctx("PM-API", style="magenta", show_key=True))
+    _, second_kwargs = bound_module.process("second", {"extra": shared_extra})
+
+    assert first_kwargs["extra"] is not shared_extra
+    assert second_kwargs["extra"] is not shared_extra
+    assert shared_extra == {"context": {}}
+    assert set(first_kwargs["extra"]["context"]) == {"context::app"}
+    assert set(second_kwargs["extra"]["context"]) == {"context::module"}
+
+
+@pytest.mark.parametrize(
+    "logger",
+    [{"level": "DEBUG", "enqueue": False}, {"level": "DEBUG", "enqueue": True}],
+    indirect=True,
+)
+def test_bind_process_accepts_extra_none(logger):
+    bound = logger.bind(module=ctx("PM-API", style="magenta", show_key=True))
+
+    _, kwargs = bound.process("message", {"extra": None})
+
+    assert kwargs["extra"]["context"] == {
+        "context::module": ctx("PM-API", style="magenta", show_key=True)
+    }
+
+
+@pytest.mark.parametrize(
+    "logger",
+    [{"level": "DEBUG", "enqueue": False}, {"level": "DEBUG", "enqueue": True}],
+    indirect=True,
+)
+def test_bind_process_copies_read_only_extra_mapping(logger):
+    bound = logger.bind(module=ctx("PM-API", style="magenta", show_key=True))
+    read_only_extra = MappingProxyType(
+        {
+            "context": {"request_id": ctx("req-42", style="cyan", show_key=True)},
+            "user": "alice",
+        }
+    )
+
+    _, kwargs = bound.process("message", {"extra": read_only_extra})
+
+    assert kwargs["extra"] is not read_only_extra
+    assert kwargs["extra"]["user"] == "alice"
+    assert kwargs["extra"]["context"] == {
+        "context::module": ctx("PM-API", style="magenta", show_key=True),
+        "request_id": ctx("req-42", style="cyan", show_key=True),
+    }

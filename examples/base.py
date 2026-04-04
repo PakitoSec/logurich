@@ -41,4 +41,17 @@ if __name__ == "__main__":
     except ZeroDivisionError:
         logger.exception("An error occurred while processing %s", "demo")
 
+    # ── bind() ── per-instance context ──────────────────────────────
+    api_logger = logger.bind(
+        ctx_module=logger.ctx("API", style="magenta"),
+    )
+    api_logger.info("Request received")
+    api_logger.info("Processing complete")
+
+    # Chained bind
+    req_logger = api_logger.bind(
+        request_id=ctx("req-99", style="cyan", show_key=True),
+    )
+    req_logger.info("Handling request")
+
     shutdown_logger()

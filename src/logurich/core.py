@@ -212,11 +212,113 @@ else:
                 stacklevel=2,
             )
 
+        def bind(self, **kwargs: Any) -> BoundLogger:
+            """Return a new :class:`BoundLogger` with *kwargs* pre-set as context."""
+            bound_context: dict[str, ContextValue] = {}
+            for key, value in kwargs.items():
+                normalized_key = _normalize_context_key(key)
+                coerced = _coerce_context_value(value)
+                if coerced is not None:
+                    bound_context[normalized_key] = coerced
+            return BoundLogger(self, bound_context)
+
+
+class BoundLogger(logging.LoggerAdapter):
+    """Logger adapter that carries pre-bound context on every log call."""
+
+    def __init__(
+        self,
+        logger_: Union[logging.Logger, logging.LoggerAdapter],
+        bound_context: dict[str, ContextValue],
+    ) -> None:
+        # LoggerAdapter expects (logger, extra); we store context separately.
+        super().__init__(
+            logger_ if isinstance(logger_, logging.Logger) else logger_.logger,
+            {},
+        )
+        self._bound_context = bound_context
+        # Preserve chained context from a wrapped BoundLogger.
+        if isinstance(logger_, BoundLogger):
+            merged = dict(logger_._bound_context)
+            merged.update(bound_context)
+            self._bound_context = merged
+
+    # -- public convenience methods (mirror LogurichLogger) ----------------
+
+    def ctx(
+        self,
+        value: Any,
+        *,
+        style: Optional[str] = None,
+        value_style: Optional[str] = None,
+        bracket_style: Optional[str] = None,
+        label: Optional[str] = None,
+        show_key: Optional[bool] = None,
+    ) -> ContextValue:
+        return ctx(
+            value,
+            style=style,
+            value_style=value_style,
+            bracket_style=bracket_style,
+            label=label,
+            show_key=show_key,
+        )
+
+    def rich(
+        self,
+        log_level: Union[str, int],
+        *renderables: Union[ConsoleRenderable, str],
+        title: str = "",
+        prefix: bool = True,
+        end: str = "\n",
+        width: Optional[int] = None,
+    ) -> None:
+        self.log(
+            _coerce_level(log_level),
+            title,
+            extra={
+                "renderables": renderables,
+                "render_prefix": prefix,
+                "render_width": width,
+                "end": end,
+            },
+            stacklevel=2,
+        )
+
+    def bind(self, **kwargs: Any) -> BoundLogger:
+        """Return a new :class:`BoundLogger` adding *kwargs* to the bound context."""
+        new_context: dict[str, ContextValue] = {}
+        for key, value in kwargs.items():
+            normalized_key = _normalize_context_key(key)
+            coerced = _coerce_context_value(value)
+            if coerced is not None:
+                new_context[normalized_key] = coerced
+        return BoundLogger(self, new_context)
+
+    # -- adapter plumbing --------------------------------------------------
+
+    def process(
+        self, msg: Any, kwargs: Any
+    ) -> tuple[Any, Any]:
+        extra = kwargs.get("extra")
+        merged_extra = {} if extra is None else dict(extra)
+        # Merge: bound context first, then per-call context overrides.
+        existing = merged_extra.get("context")
+        merged: dict[str, Any] = dict(self._bound_context)
+        if isinstance(existing, Mapping):
+            merged.update(existing)
+        elif existing is not None:
+            merged["context"] = existing
+        merged_extra["context"] = merged
+        kwargs["extra"] = merged_extra
+        return msg, kwargs
+
 
 def _install_logger_class() -> None:
     logging.setLoggerClass(LogurichLogger)
     logging.RootLogger.ctx = LogurichLogger.ctx
     logging.RootLogger.rich = LogurichLogger.rich
+    logging.RootLogger.bind = LogurichLogger.bind
 
     for existing in logging.Logger.manager.loggerDict.values():
         if isinstance(existing, logging.PlaceHolder):

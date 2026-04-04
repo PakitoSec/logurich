@@ -11,6 +11,7 @@ from .console import (
 )
 from .core import (
     LOG_LEVEL_CHOICES,
+    BoundLogger,
     ContextValue,
     LogLevel,
     LogurichLogger,
@@ -32,6 +33,7 @@ __all__ = [
     "shutdown_logger",
     "ctx",
     "ContextValue",
+    "BoundLogger",
     "LogurichLogger",
     "global_context_configure",
     "global_context_set",
