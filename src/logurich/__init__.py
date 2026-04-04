@@ -1,6 +1,6 @@
 """Public package exports for logurich."""
 
-__version__ = "0.8.3"
+__version__ = "0.9.0"
 
 from .console import (
     console,
@@ -21,13 +21,11 @@ from .core import (
     global_context_configure,
     global_context_set,
     init_logger,
-    logger,
     shutdown_logger,
 )
 
 __all__ = [
     "init_logger",
-    "logger",
     "get_log_queue",
     "configure_child_logging",
     "shutdown_logger",
