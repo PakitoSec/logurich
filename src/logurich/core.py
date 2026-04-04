@@ -297,9 +297,7 @@ class BoundLogger(logging.LoggerAdapter):
 
     # -- adapter plumbing --------------------------------------------------
 
-    def process(
-        self, msg: Any, kwargs: Any
-    ) -> tuple[Any, Any]:
+    def process(self, msg: Any, kwargs: Any) -> tuple[Any, Any]:
         extra = kwargs.get("extra")
         merged_extra = {} if extra is None else dict(extra)
         # Merge: bound context first, then per-call context overrides.

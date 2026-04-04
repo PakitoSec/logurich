@@ -347,7 +347,12 @@ class CustomHandler(Handler):
                 if exception_text:
                     output_text.append("\n")
                     output_text.append_text(Text(exception_text))
-                self._console.print(output_text, end=end, highlight=False)
+                self._console.print(
+                    output_text,
+                    end=end,
+                    highlight=False,
+                    soft_wrap=True,
+                )
             elif exception_text:
                 self._console.print(Text(exception_text), end=end, highlight=False)
 

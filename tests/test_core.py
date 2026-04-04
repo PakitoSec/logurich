@@ -16,6 +16,7 @@ from logurich import (
 from logurich import (
     logger as exported_logger,
 )
+from logurich.console import rich_configure_console
 
 
 @pytest.mark.parametrize(
@@ -241,6 +242,24 @@ def test_logurich_serialize_stdlib_extra_payload(monkeypatch, buffer):
     assert payload["record"]["extra"]["action"] == "test"
 
 
+def test_single_line_messages_preserve_full_text_with_soft_wrap(buffer):
+    rich_configure_console(file=buffer, width=65)
+    init_logger("INFO", enqueue=False)
+
+    logging.getLogger("api").info(
+        "Handling request",
+        extra={
+            "context": {"API": ctx("API"), "request_id": ctx("req-99", show_key=True)}
+        },
+    )
+    shutdown_logger()
+
+    lines = [line for line in buffer.getvalue().splitlines() if line.strip()]
+    assert len(lines) == 1
+    assert "Handling request" in lines[0]
+    assert "…" not in lines[0]
+
+
 def test_level_by_module_filters_named_loggers(buffer):
     init_logger(
         "INFO",
@@ -309,9 +328,8 @@ def test_bind_context_appears_in_logs(logger, buffer):
     indirect=True,
 )
 def test_bind_chaining(logger, buffer):
-    bound = (
-        logger.bind(app=ctx("myapp", style="green", show_key=True))
-        .bind(module=ctx("PM-API", style="magenta", show_key=True))
+    bound = logger.bind(app=ctx("myapp", style="green", show_key=True)).bind(
+        module=ctx("PM-API", style="magenta", show_key=True)
     )
     bound.info("chained")
     shutdown_logger()
@@ -346,9 +364,7 @@ def test_bind_with_global_context(logger, buffer):
     with global_context_configure(
         global_key=ctx("global_val", style="yellow", show_key=True)
     ):
-        bound = logger.bind(
-            bound_key=ctx("bound_val", style="cyan", show_key=True)
-        )
+        bound = logger.bind(bound_key=ctx("bound_val", style="cyan", show_key=True))
         bound.info("merged")
     shutdown_logger()
     output = buffer.getvalue()
