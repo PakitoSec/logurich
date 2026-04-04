@@ -12,7 +12,6 @@ from logurich import (
     get_log_queue,
     global_context_configure,
     init_logger,
-    shutdown_logger,
 )
 
 
@@ -108,8 +107,6 @@ def main() -> None:
                 index,
                 process.pid,
             )
-
-    shutdown_logger()
 
 
 if __name__ == "__main__":

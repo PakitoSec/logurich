@@ -9,4 +9,6 @@ logger_state: dict[str, Any] = {
     "queue": None,
     "listener": None,
     "final_handlers": (),
+    "env_extra": {},
+    "atexit_registered": False,
 }

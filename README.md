@@ -18,7 +18,7 @@ pip install logurich[click]
 ```python
 from rich.panel import Panel
 
-from logurich import init_logger, logger, shutdown_logger
+from logurich import init_logger, logger
 
 init_logger("INFO", enqueue=False)
 
@@ -46,10 +46,11 @@ logger.info(
     },
 )
 
-shutdown_logger()
 ```
 
 `logger.ctx(...)` is shorthand for the existing module-level `ctx(...)` helper. `logger.contextualize(...)` is a convenience alias for `global_context_configure(...)`. The module-level helpers remain supported if you prefer `global_context_configure(...)` or `extra={"context": {"key": ctx(...)}}`.
+
+For short-lived scripts and CLIs, `init_logger()` automatically registers an `atexit` hook, so you do not need to call `shutdown_logger()` just to flush logs at process exit.
 
 ## Using Logurich in Reusable Libraries
 
@@ -88,14 +89,12 @@ Then configure Logurich once in the main program:
 
 ```python
 # main.py
-from logurich import init_logger, shutdown_logger
+from logurich import init_logger
 from mylib.service import run_job
 
 init_logger("INFO", enqueue=False)
 
 run_job("job-42")
-
-shutdown_logger()
 ```
 
 Guidelines for libraries:
@@ -114,7 +113,7 @@ When `enqueue=True`, Logurich is process-safe only if worker processes send reco
 import logging
 import multiprocessing as mp
 
-from logurich import configure_child_logging, get_log_queue, init_logger, shutdown_logger
+from logurich import configure_child_logging, get_log_queue, init_logger
 
 
 def worker(log_queue: mp.Queue, worker_id: int) -> None:
@@ -137,10 +136,11 @@ def main() -> None:
     for process in processes:
         process.join()
 
-    shutdown_logger()
 ```
 
 Only the process that calls `init_logger(..., enqueue=True)` owns the console and file handlers. Child processes must call `configure_child_logging(queue)` before logging.
+
+Call `shutdown_logger()` explicitly only when you need deterministic teardown before process exit, such as in tests or when reconfiguring logging multiple times in the same interpreter.
 
 ## Click CLI helper
 

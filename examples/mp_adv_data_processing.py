@@ -16,7 +16,6 @@ from logurich import (
     global_context_configure,
     global_context_set,
     init_logger,
-    shutdown_logger,
 )
 
 
@@ -163,8 +162,6 @@ def main():
             "Processing summary",
             extra={"renderables": (results_table, sample_results)},
         )
-
-    shutdown_logger()
 
 
 if __name__ == "__main__":

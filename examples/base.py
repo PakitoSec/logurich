@@ -1,7 +1,7 @@
 from rich.panel import Panel
 from rich.table import Table
 
-from logurich import ctx, init_logger, logger, shutdown_logger
+from logurich import ctx, init_logger, logger
 
 
 def create_rich_table() -> Table:
@@ -53,5 +53,3 @@ if __name__ == "__main__":
         request_id=ctx("req-99", style="cyan", show_key=True),
     )
     req_logger.info("Handling request")
-
-    shutdown_logger()
