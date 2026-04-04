@@ -12,7 +12,7 @@ from typing import Any, Optional, TypeVar
 
 import click
 
-from . import LOG_LEVEL_CHOICES, init_logger, logger
+from . import LOG_LEVEL_CHOICES, init_logger, logger, shutdown_logger
 
 LOGGER_PARAM_NAMES = (
     "logger_level",
@@ -21,6 +21,7 @@ LOGGER_PARAM_NAMES = (
     "logger_level_by_module",
     "logger_rich",
 )
+_CLICK_SHUTDOWN_META_KEY = "logurich_shutdown_registered"
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -134,6 +135,10 @@ def click_logger_init(
         level_by_module=lbm,
         rich_handler=logger_rich,
     )
+    click_ctx = click.get_current_context(silent=True)
+    if click_ctx is not None and not click_ctx.meta.get(_CLICK_SHUTDOWN_META_KEY):
+        click_ctx.call_on_close(shutdown_logger)
+        click_ctx.meta[_CLICK_SHUTDOWN_META_KEY] = True
     logger.debug("Log level:            %s", logger_level)
     logger.debug("Log verbose:          %s", logger_verbose)
     logger.debug("Log filename:         %s", logger_filename)

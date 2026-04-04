@@ -11,4 +11,5 @@ logger_state: dict[str, Any] = {
     "final_handlers": (),
     "env_extra": {},
     "atexit_registered": False,
+    "threading_atexit_registered": False,
 }

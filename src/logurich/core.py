@@ -10,6 +10,7 @@ import logging
 import logging.handlers
 import multiprocessing as mp
 import os
+import threading
 import traceback
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -678,6 +679,20 @@ def _ensure_shutdown_atexit_registered() -> None:
     logger_state["atexit_registered"] = True
 
 
+def _ensure_shutdown_threading_atexit_registered() -> None:
+    """Register ``shutdown_logger`` before interpreter thread shutdown when possible."""
+
+    if logger_state.get("threading_atexit_registered"):
+        return
+
+    register = getattr(threading, "_register_atexit", None)
+    if register is None:
+        return
+
+    register(shutdown_logger)
+    logger_state["threading_atexit_registered"] = True
+
+
 def get_log_queue() -> mp.Queue:
     """Return the active multiprocessing queue used for logging."""
 
@@ -731,6 +746,7 @@ def init_logger(
 ) -> Optional[str]:
     """Initialize stdlib logging with optional Rich rendering and queue support."""
 
+    _ensure_shutdown_threading_atexit_registered()
     _ensure_shutdown_atexit_registered()
     shutdown_logger()
 
