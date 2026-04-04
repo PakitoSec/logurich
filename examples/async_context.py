@@ -9,7 +9,6 @@ from logurich import (
     get_log_queue,
     global_context_configure,
     init_logger,
-    shutdown_logger,
 )
 
 request_log = logging.getLogger("example.request")
@@ -90,7 +89,4 @@ async def main(log_queue: mp.Queue) -> None:
 if __name__ == "__main__":
     init_logger("INFO", enqueue=True)
     log_queue = get_log_queue()
-    try:
-        asyncio.run(main(log_queue))
-    finally:
-        shutdown_logger()
+    asyncio.run(main(log_queue))

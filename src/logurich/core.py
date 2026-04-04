@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import atexit
 import contextlib
 import contextvars
 import copy
@@ -668,6 +669,15 @@ def shutdown_logger() -> None:
     _context_state.set({})
 
 
+def _ensure_shutdown_atexit_registered() -> None:
+    """Register ``shutdown_logger`` once so handlers are flushed on process exit."""
+
+    if logger_state.get("atexit_registered"):
+        return
+    atexit.register(shutdown_logger)
+    logger_state["atexit_registered"] = True
+
+
 def get_log_queue() -> mp.Queue:
     """Return the active multiprocessing queue used for logging."""
 
@@ -721,6 +731,7 @@ def init_logger(
 ) -> Optional[str]:
     """Initialize stdlib logging with optional Rich rendering and queue support."""
 
+    _ensure_shutdown_atexit_registered()
     shutdown_logger()
 
     env_rich_handler = parse_bool_env("LOGURICH_RICH")

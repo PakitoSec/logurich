@@ -17,6 +17,7 @@ from logurich import (
     logger as exported_logger,
 )
 from logurich.console import rich_configure_console
+from logurich.struct import logger_state
 
 
 @pytest.mark.parametrize(
@@ -31,6 +32,20 @@ def test_level_info(logger, buffer):
     output = buffer.getvalue()
     assert "Hello, world!" in output
     assert "Debug, world!" not in output
+
+
+def test_init_logger_registers_atexit_shutdown_once(monkeypatch):
+    registered: list[object] = []
+
+    monkeypatch.setitem(logger_state, "atexit_registered", False)
+    monkeypatch.setattr("logurich.core.atexit.register", registered.append)
+
+    init_logger("INFO", enqueue=False)
+    shutdown_logger()
+    init_logger("INFO", enqueue=False)
+    shutdown_logger()
+
+    assert registered == [shutdown_logger]
 
 
 @pytest.mark.parametrize(
