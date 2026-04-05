@@ -180,3 +180,44 @@ def cli():
 ```
 
 The `click_logger_params` decorator injects `--logger-level`, `--logger-verbose`, `--logger-filename`, `--logger-level-by-module`, and `--logger-rich` flags and configures Logurich before your command logic runs. The usage example above is also available at `examples/click_cli.py`.
+
+## Idempotent initialisation (`force`)
+
+By default, calling `init_logger()` a second time is a no-op — the existing configuration is kept and the call returns `None`. Pass `force=True` to tear down the current setup and reconfigure from scratch:
+
+```python
+from logurich import init_logger
+
+init_logger("INFO", enqueue=False)          # first call: configures logging
+init_logger("DEBUG", enqueue=False)         # no-op, returns None
+init_logger("DEBUG", enqueue=False, force=True)  # reconfigures logging
+```
+
+This is useful when tests or interactive sessions need to reset logging between runs.
+
+## User input
+
+The `user_input` module provides Rich-enhanced prompts with type coercion, hidden input, and optional timeouts. It does **not** depend on Click.
+
+```python
+import logging
+
+from logurich import init_logger, user_input, user_input_with_timeout
+
+init_logger("INFO", enqueue=False)
+logger = logging.getLogger(__name__)
+
+# Basic string input
+name = user_input("Enter your name", type=str)
+
+# Integer input with a default value
+count = user_input("How many items?", type=int, default=5)
+
+# Hidden input (e.g. passwords)
+secret = user_input("Enter secret", type=str, hide_input=True)
+
+# Input with a timeout (5 seconds, Unix only — falls back to regular input on Windows)
+answer = user_input_with_timeout("Quick! Type something", timeout_duration=5)
+```
+
+A runnable example is available at `examples/user_input_example.py`.
