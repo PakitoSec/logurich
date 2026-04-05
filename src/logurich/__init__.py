@@ -1,6 +1,6 @@
 """Public package exports for logurich."""
 
-__version__ = "0.9.0"
+__version__ = "0.9.1"
 
 from .console import (
     console,
@@ -18,6 +18,7 @@ from .core import (
     configure_child_logging,
     ctx,
     get_log_queue,
+    get_logger,
     global_context_configure,
     global_context_set,
     init_logger,
@@ -42,4 +43,5 @@ __all__ = [
     "rich_to_str",
     "LOG_LEVEL_CHOICES",
     "LogLevel",
+    "get_logger",
 ]

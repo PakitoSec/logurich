@@ -342,7 +342,18 @@ def _install_logger_class() -> None:
 
 _install_logger_class()
 
-_internal_logger: LogurichLogger = logging.getLogger("logurich")
+
+def get_logger(name: Optional[str] = None) -> LogurichLogger:
+    """Typed wrapper around :func:`logging.getLogger`.
+
+    Returns the same logger instance but typed as :class:`LogurichLogger`
+    so that IDEs auto-complete ``ctx``, ``rich``, ``bind``, and
+    ``contextualize``.
+    """
+    return logging.getLogger(name)  # type: ignore[return-value]
+
+
+_internal_logger: LogurichLogger = get_logger("logurich")
 _internal_logger.setLevel(logging.NOTSET)
 _internal_logger.propagate = True
 
