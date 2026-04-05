@@ -1,6 +1,6 @@
 """Public package exports for logurich."""
 
-__version__ = "0.9.1"
+__version__ = "0.9.2"
 
 from .console import (
     console,
@@ -24,6 +24,7 @@ from .core import (
     init_logger,
     shutdown_logger,
 )
+from .user_input import timeout, user_input, user_input_with_timeout
 
 __all__ = [
     "init_logger",
@@ -44,4 +45,7 @@ __all__ = [
     "LOG_LEVEL_CHOICES",
     "LogLevel",
     "get_logger",
+    "timeout",
+    "user_input",
+    "user_input_with_timeout",
 ]
