@@ -24,7 +24,6 @@ from .core import (
     init_logger,
     shutdown_logger,
 )
-
 from .user_input import timeout, user_input, user_input_with_timeout
 
 __all__ = [
