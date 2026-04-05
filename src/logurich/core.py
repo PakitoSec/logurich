@@ -754,8 +754,12 @@ def init_logger(
     highlight: bool = False,
     rotation: Optional[Union[str, int]] = "12:00",
     retention: Optional[int] = 10,
+    force: bool = False,
 ) -> Optional[str]:
     """Initialize stdlib logging with optional Rich rendering and queue support."""
+
+    if not force and logger_state.get("min_level") is not None:
+        return None
 
     _ensure_shutdown_threading_atexit_registered()
     _ensure_shutdown_atexit_registered()
