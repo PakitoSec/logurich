@@ -1,5 +1,4 @@
 import asyncio
-import logging
 import multiprocessing as mp
 import time
 
@@ -7,15 +6,16 @@ from logurich import (
     configure_child_logging,
     ctx,
     get_log_queue,
+    get_logger,
     global_context_configure,
     init_logger,
 )
 
-request_log = logging.getLogger("example.request")
-db_log = logging.getLogger("example.db")
-task_log = logging.getLogger("example.task")
-thread_log = logging.getLogger("example.thread")
-process_log = logging.getLogger("example.process")
+request_log = get_logger("example.request")
+db_log = get_logger("example.db")
+task_log = get_logger("example.task")
+thread_log = get_logger("example.thread")
+process_log = get_logger("example.process")
 
 
 async def fetch_user_profile() -> None:

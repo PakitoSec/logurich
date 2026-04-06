@@ -79,13 +79,11 @@ Inside the library, use standard named loggers:
 
 ```python
 # mylib/service.py
-import logging
-
 from rich.panel import Panel
 
-from logurich import ctx
+from logurich import ctx, get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def run_job(job_id: str) -> None:
@@ -118,7 +116,7 @@ run_job("job-42")
 
 Guidelines for libraries:
 
-- Use `logging.getLogger(__name__)` inside library modules.
+- Use `get_logger(__name__)` from logurich inside library modules.
 - Do not call `init_logger()` or `shutdown_logger()` from library code.
 - Emit normal stdlib log calls such as `logger.info("Value %s", value)`.
 - Use `extra={"context": ...}` and `extra={"renderables": ...}` only as optional metadata; they render nicely when the consuming application uses Logurich, and `logger.ctx(...)` / `logger.rich(...)` are also available when Logurich has been imported/configured by the application.
@@ -129,15 +127,14 @@ Guidelines for libraries:
 When `enqueue=True`, Logurich is process-safe only if worker processes send records through the shared logging queue created by the parent process.
 
 ```python
-import logging
 import multiprocessing as mp
 
-from logurich import configure_child_logging, get_log_queue, init_logger
+from logurich import configure_child_logging, get_log_queue, get_logger, init_logger
 
 
 def worker(log_queue: mp.Queue, worker_id: int) -> None:
     configure_child_logging(log_queue)
-    logging.getLogger(f"worker.{worker_id}").info("worker=%s ready", worker_id)
+    get_logger(f"worker.{worker_id}").info("worker=%s ready", worker_id)
 
 
 def main() -> None:
@@ -167,15 +164,15 @@ Install the optional Click extra to automatically expose logger configuration fl
 
 ```python
 import click
-import logging
 
+from logurich import get_logger
 from logurich.opt_click import click_logger_params
 
 
 @click.command()
 @click_logger_params
 def cli():
-    logger = logging.getLogger(__name__)
+    logger = get_logger(__name__)
     logger.info("Click integration ready!")
 ```
 
@@ -200,12 +197,10 @@ This is useful when tests or interactive sessions need to reset logging between 
 The `user_input` module provides Rich-enhanced prompts with type coercion, hidden input, and optional timeouts. It does **not** depend on Click.
 
 ```python
-import logging
-
-from logurich import init_logger, user_input, user_input_with_timeout
+from logurich import get_logger, init_logger, user_input, user_input_with_timeout
 
 init_logger("INFO", enqueue=False)
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Basic string input
 name = user_input("Enter your name", type=str)

@@ -1,4 +1,3 @@
-import logging
 import multiprocessing as mp
 import os
 import random
@@ -13,6 +12,7 @@ from logurich import (
     configure_child_logging,
     ctx,
     get_log_queue,
+    get_logger,
     global_context_configure,
     global_context_set,
     init_logger,
@@ -35,7 +35,7 @@ def init_worker(log_queue):
 
 
 def process_item(item):
-    logger = logging.getLogger("processor.worker")
+    logger = get_logger("processor.worker")
     global_context_set(item=ctx(str(item["id"]), label="item", style="cyan"))
 
     try:
@@ -92,7 +92,7 @@ def worker_entry(item):
 def main():
     init_logger("INFO", log_verbose=2, enqueue=True)
     log_queue = get_log_queue()
-    logger = logging.getLogger("processor.main")
+    logger = get_logger("processor.main")
 
     with global_context_configure(
         group=ctx("DataProcessor", style="green", show_key=True)

@@ -1,10 +1,9 @@
-import logging
 import os
 
 from rich.panel import Panel
 from rich.table import Table
 
-from logurich import ctx, global_context_configure, init_logger
+from logurich import ctx, get_logger, global_context_configure, init_logger
 
 
 def build_table() -> Table:
@@ -27,7 +26,7 @@ if __name__ == "__main__":
         rotation=None,
         retention=None,
     )
-    logger = logging.getLogger(__name__)
+    logger = get_logger(__name__)
 
     logger.info(
         "Basic serialized message",

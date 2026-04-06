@@ -1,7 +1,6 @@
-import logging
-
 import click
 
+from logurich import get_logger
 from logurich.opt_click import click_logger_params
 
 
@@ -11,7 +10,7 @@ from logurich.opt_click import click_logger_params
 @click.option("--count", default=1, type=int, help="Number of greetings to emit.")
 def main(name: str, count: int) -> None:
     """Demonstrate automatic logger wiring inside a Click command."""
-    logger = logging.getLogger(__name__)
+    logger = get_logger(__name__)
 
     for _ in range(count):
         logger.info("Hello %s", name)
