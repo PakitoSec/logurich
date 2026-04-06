@@ -1,10 +1,8 @@
-import logging
-
-from logurich import init_logger, user_input, user_input_with_timeout
+from logurich import get_logger, init_logger, user_input, user_input_with_timeout
 
 if __name__ == "__main__":
     init_logger("INFO", enqueue=False)
-    logger = logging.getLogger(__name__)
+    logger = get_logger(__name__)
 
     # Basic string input
     name = user_input("Enter your name", type=str)
@@ -19,7 +17,7 @@ if __name__ == "__main__":
     logger.info("Secret length: %d", len(secret))
 
     # Custom logger
-    custom = logging.getLogger("custom")
+    custom = get_logger("custom")
     colour = user_input("Favourite colour", type=str, custom_logger=custom)
     logger.info("Colour: %s", colour)
 

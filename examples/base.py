@@ -1,9 +1,7 @@
-import logging
-
 from rich.panel import Panel
 from rich.table import Table
 
-from logurich import ctx, init_logger
+from logurich import ctx, get_logger, init_logger
 
 
 def create_rich_table() -> Table:
@@ -17,7 +15,7 @@ def create_rich_table() -> Table:
 
 if __name__ == "__main__":
     init_logger("INFO", enqueue=False)
-    logger = logging.getLogger(__name__)
+    logger = get_logger(__name__)
 
     logger.info("This is a basic log message")
     logger.info("Hello %s", "world")

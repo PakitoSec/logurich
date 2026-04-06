@@ -1,4 +1,3 @@
-import logging
 import multiprocessing as mp
 import random
 import time
@@ -10,6 +9,7 @@ from logurich import (
     configure_child_logging,
     ctx,
     get_log_queue,
+    get_logger,
     global_context_configure,
     init_logger,
 )
@@ -17,7 +17,7 @@ from logurich import (
 
 def worker_function(log_queue, worker_id):
     configure_child_logging(log_queue)
-    logger = logging.getLogger(f"workers.{worker_id}")
+    logger = get_logger(f"workers.{worker_id}")
 
     with global_context_configure(worker=ctx(f"Worker-{worker_id}", show_key=True)):
         logger.info("Worker %s starting", worker_id)
@@ -65,7 +65,7 @@ def main() -> None:
     init_logger("INFO", log_verbose=2, enqueue=True)
     log_queue = get_log_queue()
 
-    logging.getLogger("main").info("Multiprocessing example starting")
+    get_logger("main").info("Multiprocessing example starting")
 
     with global_context_configure(
         process=ctx("Main-Process", style="magenta", show_key=True)
@@ -75,7 +75,7 @@ def main() -> None:
             for i in range(3)
         ]
 
-        logging.getLogger("main").info(
+        get_logger("main").info(
             "Starting worker processes",
             extra={
                 "renderables": (
@@ -95,14 +95,14 @@ def main() -> None:
         for index, process in enumerate(processes, start=1):
             table.add_row(f"Worker {index}", str(process.pid), "Running")
 
-        logging.getLogger("main").info(
+        get_logger("main").info(
             "Workers started",
             extra={"renderables": (table,)},
         )
 
         for index, process in enumerate(processes, start=1):
             process.join()
-            logging.getLogger("main").info(
+            get_logger("main").info(
                 "Worker %s (PID: %s) has completed",
                 index,
                 process.pid,
