@@ -1,9 +1,10 @@
 """Public package exports for logurich."""
 
-__version__ = "0.9.2"
+__version__ = "0.9.3"
 
 from .console import (
     console,
+    reset_console_after_fork,
     rich_configure_console,
     rich_get_console,
     rich_set_console,
@@ -38,6 +39,7 @@ __all__ = [
     "global_context_configure",
     "global_context_set",
     "console",
+    "reset_console_after_fork",
     "rich_configure_console",
     "rich_get_console",
     "rich_set_console",
