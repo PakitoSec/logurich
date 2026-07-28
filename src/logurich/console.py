@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import threading
 from typing import Any, Optional
 
 from rich.console import Console, ConsoleRenderable
@@ -133,6 +135,30 @@ def rich_configure_console(*args: Any, **kwargs: Any) -> Console:
     _console = rich_get_console()
     _console.__dict__ = new_console.__dict__
     return _console
+
+
+def reset_console_after_fork() -> None:
+    """Rebuild the console synchronisation state in a freshly forked child.
+
+    :class:`~rich.console.Console` serialises writes with a
+    :class:`threading.RLock`. ``os.fork()`` only clones the calling thread, so a
+    lock held by another thread at fork time is inherited in a locked state that
+    nothing will ever release, and the first log emitted by the child blocks
+    forever. This is a common deadlock with ``multiprocessing`` on the default
+    ``fork`` start method and with pre-fork worker pools such as Celery's.
+
+    The locks are replaced, never acquired, so the child always starts from a
+    usable state. This is registered as an ``after_in_child`` fork handler on
+    platforms that support it, so callers do not have to do anything.
+    """
+    if _console is None:
+        return
+    _console._lock = threading.RLock()
+    _console._record_buffer_lock = threading.RLock()
+
+
+if hasattr(os, "register_at_fork"):  # pragma: no cover - platform dependent
+    os.register_at_fork(after_in_child=reset_console_after_fork)
 
 
 console = rich_get_console()

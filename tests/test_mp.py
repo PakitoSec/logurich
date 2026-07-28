@@ -1,11 +1,13 @@
 import logging
 import multiprocessing as mp
 import os
+import signal
 import subprocess
 import sys
 import textwrap
 from pathlib import Path
 
+import pytest
 from rich.panel import Panel
 from rich.table import Table
 
@@ -15,6 +17,7 @@ from logurich import (
     get_log_queue,
     global_context_configure,
     init_logger,
+    rich_get_console,
     shutdown_logger,
 )
 
@@ -197,3 +200,43 @@ def test_spawn_pool_initializer_can_configure_child_logging(tmp_path):
     )
 
     assert result.returncode == 0, result.stderr or result.stdout
+
+
+@pytest.mark.skipif(not hasattr(os, "fork"), reason="fork() is not available")
+def test_console_lock_is_released_in_forked_child():
+    """A lock held at fork time must not deadlock the child.
+
+    ``os.fork()`` only clones the calling thread, so an inherited locked
+    ``RLock`` would never be released and the first log call in the child would
+    block forever.
+    """
+    console = rich_get_console()
+    stale_lock = console._lock
+    stale_lock.acquire()
+
+    read_fd, write_fd = os.pipe()
+    pid = os.fork()
+    if pid == 0:
+        os.close(read_fd)
+        try:
+            signal.alarm(10)  # never hang the suite if the fix regresses
+            child_console = rich_get_console()
+            assert child_console is console
+            assert child_console._lock is not stale_lock
+            logging.getLogger("workers.fork").warning("child is alive")
+            os.write(write_fd, b"1")
+        except BaseException:
+            os.write(write_fd, b"0")
+        finally:
+            os._exit(0)
+
+    os.close(write_fd)
+    try:
+        outcome = os.read(read_fd, 1)
+        _, status = os.waitpid(pid, 0)
+    finally:
+        os.close(read_fd)
+        stale_lock.release()
+
+    assert status == 0
+    assert outcome == b"1", "forked child inherited a locked console"
