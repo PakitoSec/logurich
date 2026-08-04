@@ -1,257 +1,226 @@
-"""Core logging configuration and helpers for logurich."""
+"""Core logging configuration and the public Logurich logger adapter."""
 
 from __future__ import annotations
 
 import atexit
 import contextlib
-import contextvars
 import copy
+import difflib
 import logging
 import logging.handlers
 import multiprocessing as mp
 import os
+import pickle
 import threading
 import traceback
+import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import time as datetime_time
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal, Optional, Union, get_args
 
 from rich.console import ConsoleRenderable
-from rich.markup import escape
 from rich.traceback import Traceback
 
+from .console import rich_get_console, rich_to_str
+from .context import (
+    ContextValue,
+    clear_context,
+    ctx,
+    get_context,
+    global_context_configure,
+    normalize_context,
+)
 from .handler import (
     CustomHandler,
     CustomRichHandler,
     LogurichFileFormatter,
     LogurichRenderer,
+    RichLayoutUnavailable,
 )
 from .struct import logger_state
-from .utils import parse_bool_env
 
-_context_state: contextvars.ContextVar[dict[str, ContextValue] | None] = (
-    contextvars.ContextVar("logurich_context_state", default=None)
-)
+LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+ConsoleMode = Literal["auto", "rich", "plain", "json"]
+FileMode = Literal["text", "json"]
 
-COLOR_ALIASES = {
-    "g": "green",
-    "e": "blue",
-    "c": "cyan",
-    "m": "magenta",
-    "r": "red",
-    "w": "white",
-    "y": "yellow",
-    "b": "bold",
-    "u": "u",
-    "bg": " on ",
-}
+LOG_LEVEL_CHOICES: tuple[str, ...] = get_args(LogLevel)
+CONSOLE_MODE_CHOICES: tuple[str, ...] = get_args(ConsoleMode)
+FILE_MODE_CHOICES: tuple[str, ...] = get_args(FileMode)
 
+# Logurich reserves no call keywords of its own; rendering options live on rich().
+_STDLIB_CALL_KWARGS = frozenset({"exc_info", "stack_info", "stacklevel", "extra"})
+_METADATA_KWARG = "_logurich_meta"
+_LEGACY_EXTRA_KEYS = frozenset({"context", "renderables"})
+_STANDARD_LOG_RECORD_ATTRS = frozenset(logging.makeLogRecord({}).__dict__)
+_RESERVED_CALL_KWARGS = tuple(sorted(_STDLIB_CALL_KWARGS))
 
-def _normalize_style(style: Optional[str]) -> Optional[str]:
-    if style is None:
-        return None
-    style = style.strip()
-    if not style:
-        return None
-    return COLOR_ALIASES.get(style, style)
-
-
-def _wrap_markup(style: Optional[str], text: str) -> str:
-    normalized = _normalize_style(style)
-    if not normalized:
-        return text
-    return f"[{normalized}]{text}[/{normalized}]"
-
-
-def _context_display_name(name: str) -> str:
-    if name.startswith("context::"):
-        return name.split("::", 1)[1]
-    return name
+LogLevels = tuple[int, Optional[dict[str, int]]]
 
 
 @dataclass(frozen=True)
-class ContextValue:
-    """Display metadata for contextual log values."""
+class _OutputModes:
+    """Resolved and validated output modes used by ``init_logger``."""
 
-    value: Any
-    value_style: Optional[str] = None
-    bracket_style: Optional[str] = None
-    label: Optional[str] = None
-    show_key: bool = False
-
-    def _label(self, key: str) -> Optional[str]:
-        if self.label is not None:
-            return self.label
-        if self.show_key:
-            return key
-        return None
-
-    def render(self, key: str, *, is_rich_handler: bool) -> str:
-        label = self._label(key)
-        value_text = escape(str(self.value))
-        value_text = _wrap_markup(self.value_style, value_text)
-        body = f"{escape(label)}={value_text}" if label else value_text
-        if is_rich_handler:
-            return body
-        if _normalize_style(self.bracket_style):
-            left = _wrap_markup(self.bracket_style, "[")
-            right = _wrap_markup(self.bracket_style, "]")
-        else:
-            left = r"\["
-            right = "]"
-        return f"{left}{body}{right}"
+    console: str
+    file: str
 
 
-def _normalize_context_key(key: str) -> str:
-    if key.startswith("context::"):
-        return key
-    return f"context::{key}"
+def _normalise_choice(value: Any, choices: tuple[str, ...], name: str) -> str:
+    if not isinstance(value, str):
+        raise TypeError(f"{name} must be a string, not {type(value).__name__}")
+    normalised = value.strip().lower()
+    if normalised not in choices:
+        allowed = ", ".join(choices)
+        raise ValueError(f"Invalid {name} mode {value!r}; expected one of: {allowed}")
+    return normalised
 
 
-def _coerce_context_value(value: Any) -> Optional[ContextValue]:
-    if value is None:
-        return None
-    if isinstance(value, ContextValue):
-        return value
-    return ContextValue(value=value)
+def _resolve_output_modes(
+    *,
+    console: str,
+    file: str,
+    is_terminal: bool,
+    env: Optional[Mapping[str, str]] = None,
+) -> _OutputModes:
+    """Validate output modes and deterministically resolve ``console='auto'``."""
+
+    environment = {} if env is None else env
+    resolved_console = _normalise_choice(console, CONSOLE_MODE_CHOICES, "console")
+    env_console = environment.get("LOGURICH_OUTPUT")
+    if env_console is not None:
+        try:
+            resolved_console = _normalise_choice(
+                env_console, CONSOLE_MODE_CHOICES, "LOGURICH_OUTPUT"
+            )
+        except ValueError as error:
+            # A bad env var must not take down the application at startup.
+            warnings.warn(
+                f"{error}; falling back to console={resolved_console!r}", stacklevel=3
+            )
+    resolved_file = _normalise_choice(file, FILE_MODE_CHOICES, "file")
+    if resolved_console == "auto":
+        resolved_console = "plain" if is_terminal else "json"
+    return _OutputModes(console=resolved_console, file=resolved_file)
 
 
-def _get_context_state() -> dict[str, ContextValue]:
-    current = _context_state.get()
-    return dict(current) if current else {}
+@lru_cache(maxsize=512)
+def _misspelled_call_kwarg(key: str) -> Optional[str]:
+    """Return the reserved keyword ``key`` most likely misspells, if any."""
 
-
-def _merge_context(raw_context: Any) -> dict[str, ContextValue]:
-    merged = _get_context_state()
-    if raw_context is None:
-        return merged
-
-    items = (
-        raw_context.items()
-        if isinstance(raw_context, Mapping)
-        else [("context", raw_context)]
-    )
-    for key, value in items:
-        normalized_key = _normalize_context_key(str(key))
-        normalized_value = _coerce_context_value(value)
-        if normalized_value is None:
-            merged.pop(normalized_key, None)
-            continue
-        merged[normalized_key] = normalized_value
-    return merged
-
-
-def _load_env_extra() -> dict[str, str]:
-    env_extra: dict[str, str] = {}
-    for name, value in os.environ.items():
-        if name.startswith("LOGURICH_EXTRA_"):
-            env_extra[name.removeprefix("LOGURICH_EXTRA_")] = value
-    return env_extra
+    matches = difflib.get_close_matches(key, _RESERVED_CALL_KWARGS, n=1, cutoff=0.85)
+    return matches[0] if matches else None
 
 
 def _coerce_level(level: Union[str, int]) -> int:
+    if isinstance(level, bool):
+        raise TypeError("Log level must be a string or integer")
     if isinstance(level, int):
         if level < 0:
-            raise ValueError("Log level must be a positive integer")
+            raise ValueError("Log level must be a non-negative integer")
         return level
+    if not isinstance(level, str):
+        raise TypeError("Log level must be a string or integer")
     normalized = level.upper()
     if normalized not in logging._nameToLevel or normalized == "NOTSET":
         raise ValueError(f"Unknown log level: {level}")
     return logging._nameToLevel[normalized]
 
 
-_BaseLoggerClass = logging.getLoggerClass()
-
-
-if hasattr(_BaseLoggerClass, "_logurich_logger_class"):
-    LogurichLogger = _BaseLoggerClass
-else:
-
-    class LogurichLogger(_BaseLoggerClass):
-        """Custom logger exposing Logurich convenience methods."""
-
-        _logurich_logger_class = True
-
-        def ctx(
-            self,
-            value: Any,
-            *,
-            style: Optional[str] = None,
-            value_style: Optional[str] = None,
-            bracket_style: Optional[str] = None,
-            label: Optional[str] = None,
-            show_key: Optional[bool] = None,
-        ) -> ContextValue:
-            return ctx(
-                value,
-                style=style,
-                value_style=value_style,
-                bracket_style=bracket_style,
-                label=label,
-                show_key=show_key,
-            )
-
-        def rich(
-            self,
-            log_level: Union[str, int],
-            *renderables: Union[ConsoleRenderable, str],
-            title: str = "",
-            prefix: bool = True,
-            end: str = "\n",
-            width: Optional[int] = None,
-        ) -> None:
-            self.log(
-                _coerce_level(log_level),
-                title,
-                extra={
-                    "renderables": renderables,
-                    "render_prefix": prefix,
-                    "render_width": width,
-                    "end": end,
-                },
-                stacklevel=2,
-            )
-
-        def bind(self, **kwargs: Any) -> BoundLogger:
-            """Return a new :class:`BoundLogger` with *kwargs* pre-set as context."""
-            bound_context: dict[str, ContextValue] = {}
-            for key, value in kwargs.items():
-                normalized_key = _normalize_context_key(key)
-                coerced = _coerce_context_value(value)
-                if coerced is not None:
-                    bound_context[normalized_key] = coerced
-            return BoundLogger(self, bound_context)
-
-        def contextualize(
-            self, **kwargs: Any
-        ) -> contextlib.AbstractContextManager[None]:
-            """Temporarily configure scoped context for this execution context."""
-            return global_context_configure(**kwargs)
-
-
-class BoundLogger(logging.LoggerAdapter):
-    """Logger adapter that carries pre-bound context on every log call."""
+class LogurichLogger(logging.LoggerAdapter):
+    """Explicit Logurich wrapper around an unmodified stdlib logger."""
 
     def __init__(
         self,
-        logger_: Union[logging.Logger, logging.LoggerAdapter],
-        bound_context: dict[str, ContextValue],
+        logger: logging.Logger,
+        bound_context: Optional[Mapping[str, Any]] = None,
     ) -> None:
-        # LoggerAdapter expects (logger, extra); we store context separately.
-        super().__init__(
-            logger_ if isinstance(logger_, logging.Logger) else logger_.logger,
-            {},
-        )
-        self._bound_context = bound_context
-        # Preserve chained context from a wrapped BoundLogger.
-        if isinstance(logger_, BoundLogger):
-            merged = dict(logger_._bound_context)
-            merged.update(bound_context)
-            self._bound_context = merged
+        super().__init__(logger, {})
+        self._bound_context = normalize_context(bound_context or {})
 
-    # -- public convenience methods (mirror LogurichLogger) ----------------
+    @property
+    def name(self) -> str:
+        return self.logger.name
+
+    @property
+    def level(self) -> int:
+        return self.logger.level
+
+    @level.setter
+    def level(self, value: int) -> None:
+        self.logger.setLevel(value)
+
+    @property
+    def handlers(self) -> list[logging.Handler]:
+        return self.logger.handlers
+
+    @handlers.setter
+    def handlers(self, value: list[logging.Handler]) -> None:
+        self.logger.handlers = value
+
+    @property
+    def propagate(self) -> bool:
+        return self.logger.propagate
+
+    @propagate.setter
+    def propagate(self, value: bool) -> None:
+        self.logger.propagate = value
+
+    @property
+    def disabled(self) -> bool:
+        return self.logger.disabled
+
+    @disabled.setter
+    def disabled(self, value: bool) -> None:
+        self.logger.disabled = value
+
+    def setLevel(self, level: Union[int, str]) -> None:
+        self.logger.setLevel(level)
+
+    def isEnabledFor(self, level: int) -> bool:
+        return self.logger.isEnabledFor(level)
+
+    def addHandler(self, handler: logging.Handler) -> None:
+        self.logger.addHandler(handler)
+
+    def removeHandler(self, handler: logging.Handler) -> None:
+        self.logger.removeHandler(handler)
+
+    @staticmethod
+    def _validate_legacy_extra(extra: Any) -> None:
+        if not isinstance(extra, Mapping):
+            return
+        legacy = sorted(_LEGACY_EXTRA_KEYS.intersection(extra))
+        if not legacy:
+            return
+        key = legacy[0]
+        if key == "context":
+            replacement = "pass context as keyword arguments"
+        else:
+            replacement = "use logger.rich(level, *renderables, ...)"
+        raise TypeError(f"extra={{'{key}': ...}} is no longer supported; {replacement}")
+
+    @staticmethod
+    def _validate_call_kwargs(kwargs: Mapping[str, Any]) -> None:
+        if "renderables" in kwargs:
+            raise TypeError(
+                "'renderables' is not a logging keyword; "
+                "use logger.rich(level, *renderables, ...)"
+            )
+
+    def log(self, level: int, msg: Any, *args: Any, **kwargs: Any) -> None:
+        """Validate removed APIs even when a record would be filtered out."""
+
+        self._validate_legacy_extra(kwargs.get("extra"))
+        self._validate_call_kwargs(kwargs)
+        if not self.isEnabledFor(level):
+            return
+        # Bypass LoggerAdapter.log: findCaller only skips its frame on 3.11+.
+        kwargs["stacklevel"] = kwargs.get("stacklevel", 1) + 1
+        msg, kwargs = self.process(msg, kwargs)
+        self.logger.log(level, msg, *args, **kwargs)
 
     def ctx(
         self,
@@ -280,82 +249,109 @@ class BoundLogger(logging.LoggerAdapter):
         prefix: bool = True,
         end: str = "\n",
         width: Optional[int] = None,
+        highlight: bool = False,
     ) -> None:
+        """Log live Rich renderables without rendering them at the call site."""
+
+        if width is not None and width < 1:
+            raise ValueError("width must be >= 1")
         self.log(
             _coerce_level(log_level),
             title,
-            extra={
-                "renderables": renderables,
-                "render_prefix": prefix,
-                "render_width": width,
-                "end": end,
-            },
             stacklevel=2,
+            **{
+                _METADATA_KWARG: {
+                    "renderables": renderables,
+                    "render_prefix": prefix,
+                    "render_width": width,
+                    "end": end,
+                    "rich_highlight": highlight,
+                }
+            },
         )
 
-    def bind(self, **kwargs: Any) -> BoundLogger:
-        """Return a new :class:`BoundLogger` adding *kwargs* to the bound context."""
-        new_context: dict[str, ContextValue] = {}
-        for key, value in kwargs.items():
-            normalized_key = _normalize_context_key(key)
-            coerced = _coerce_context_value(value)
-            if coerced is not None:
-                new_context[normalized_key] = coerced
-        return BoundLogger(self, new_context)
+    def bind(self, **values: Any) -> LogurichLogger:
+        """Return a new adapter with additional immutable bound context."""
 
-    def contextualize(self, **kwargs: Any) -> contextlib.AbstractContextManager[None]:
-        """Temporarily configure scoped context for this execution context."""
-        return global_context_configure(**kwargs)
+        merged = dict(self._bound_context)
+        merged.update(normalize_context(values))
+        return type(self)(self.logger, merged)
 
-    # -- adapter plumbing --------------------------------------------------
+    def new(self, **values: Any) -> LogurichLogger:
+        """Return a new adapter whose bound context is exactly ``values``."""
+
+        return type(self)(self.logger, values)
+
+    def unbind(self, *keys: str) -> LogurichLogger:
+        """Return a new adapter without ``keys``, failing for missing keys."""
+
+        unique_keys = tuple(dict.fromkeys(keys))
+        missing = [key for key in unique_keys if key not in self._bound_context]
+        if missing:
+            raise KeyError(missing[0])
+        remaining = dict(self._bound_context)
+        for key in unique_keys:
+            del remaining[key]
+        return type(self)(self.logger, remaining)
+
+    def try_unbind(self, *keys: str) -> LogurichLogger:
+        """Return a new adapter without ``keys``, ignoring missing keys."""
+
+        remaining = dict(self._bound_context)
+        for key in keys:
+            remaining.pop(key, None)
+        return type(self)(self.logger, remaining)
+
+    def contextualize(self, **values: Any) -> contextlib.AbstractContextManager[None]:
+        """Temporarily extend context for the current execution."""
+
+        return global_context_configure(**values)
 
     def process(self, msg: Any, kwargs: Any) -> tuple[Any, Any]:
-        extra = kwargs.get("extra")
-        merged_extra = {} if extra is None else dict(extra)
-        # Merge: bound context first, then per-call context overrides.
-        existing = merged_extra.get("context")
-        merged: dict[str, Any] = dict(self._bound_context)
-        if isinstance(existing, Mapping):
-            merged.update(existing)
-        elif existing is not None:
-            merged["context"] = existing
-        merged_extra["context"] = merged
+        """Split stdlib options from per-call context."""
+
+        supplied_extra = kwargs.get("extra")
+        if supplied_extra is None:
+            merged_extra: dict[str, Any] = {}
+        elif isinstance(supplied_extra, Mapping):
+            merged_extra = dict(supplied_extra)
+        else:
+            raise TypeError("extra must be a mapping or None")
+
+        self._validate_legacy_extra(merged_extra)
+
+        metadata: dict[str, Any] = kwargs.pop(_METADATA_KWARG, None) or {}
+        call_context: dict[str, Any] = {
+            key: kwargs.pop(key)
+            for key in tuple(kwargs)
+            if key not in _STDLIB_CALL_KWARGS
+        }
+
+        context = dict(self._bound_context)
+        context.update(normalize_context(call_context))
+
+        for key in call_context:
+            suggestion = _misspelled_call_kwarg(key)
+            if suggestion is not None:
+                # Frames: process -> log -> info/debug/... -> caller.
+                warnings.warn(
+                    f"{key!r} is not a logging keyword and was recorded as "
+                    f"context; did you mean {suggestion!r}?",
+                    stacklevel=4,
+                )
+
+        merged_extra.update(metadata)
+        merged_extra["context"] = context
+        merged_extra["_logurich_record"] = True
+        merged_extra["_logurich_metadata"] = tuple(metadata)
         kwargs["extra"] = merged_extra
         return msg, kwargs
 
 
-def _install_logger_class() -> None:
-    logging.setLoggerClass(LogurichLogger)
-    logging.RootLogger.ctx = LogurichLogger.ctx
-    logging.RootLogger.rich = LogurichLogger.rich
-    logging.RootLogger.bind = LogurichLogger.bind
-    logging.RootLogger.contextualize = LogurichLogger.contextualize
-
-    for existing in logging.Logger.manager.loggerDict.values():
-        if isinstance(existing, logging.PlaceHolder):
-            continue
-        if isinstance(existing, LogurichLogger):
-            continue
-        with contextlib.suppress(TypeError):
-            existing.__class__ = LogurichLogger
-
-
-_install_logger_class()
-
-
 def get_logger(name: Optional[str] = None) -> LogurichLogger:
-    """Typed wrapper around :func:`logging.getLogger`.
+    """Return a new Logurich adapter around the named stdlib logger."""
 
-    Returns the same logger instance but typed as :class:`LogurichLogger`
-    so that IDEs auto-complete ``ctx``, ``rich``, ``bind``, and
-    ``contextualize``.
-    """
-    return logging.getLogger(name)  # type: ignore[return-value]
-
-
-_internal_logger: LogurichLogger = get_logger("logurich")
-_internal_logger.setLevel(logging.NOTSET)
-_internal_logger.propagate = True
+    return LogurichLogger(logging.getLogger(name))
 
 
 def _configure_level_by_module(
@@ -375,7 +371,7 @@ def _configure_level_by_module(
 def _resolve_level_for_record(name: str) -> int:
     min_level = logger_state.get("min_level")
     if min_level is None:
-        return logging.INFO
+        return logging.NOTSET
 
     level_per_module = logger_state.get("level_by_module") or {}
     if not level_per_module:
@@ -394,23 +390,63 @@ def _resolve_level_for_record(name: str) -> int:
     return level
 
 
+def _user_extra(record: logging.LogRecord) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in record.__dict__.items()
+        if key not in _STANDARD_LOG_RECORD_ATTRS
+        and key != "message"
+        and not key.startswith("_logurich_")
+    }
+
+
 class _ProducerFilter(logging.Filter):
-    """Enrich log records before direct output or enqueueing."""
+    """Normalise a LogRecord once, before direct output or enqueueing."""
 
     def filter(self, record: logging.LogRecord) -> bool:
         if getattr(record, "_logurich_prepared", False):
             return True
 
-        record._logurich_prepared = True
-        record.context = _merge_context(getattr(record, "context", None))
+        is_logurich_record = bool(getattr(record, "_logurich_record", False))
+        metadata = set(getattr(record, "_logurich_metadata", ()))
+        context = get_context()
+        extras = _user_extra(record)
+
+        if is_logurich_record:
+            extras.pop("context", None)
+            for key in metadata:
+                extras.pop(key, None)
+            context.update(normalize_context(extras))
+            raw_context = getattr(record, "context", {})
+            if isinstance(raw_context, Mapping):
+                context.update(normalize_context(raw_context))
+        else:
+            context.update(normalize_context(extras))
+
+        record.context = context
         record.renderables = self._normalize_renderables(
             getattr(record, "renderables", ())
+            if is_logurich_record and "renderables" in metadata
+            else ()
         )
-        record.render_prefix = getattr(record, "render_prefix", True)
-        record.render_width = getattr(record, "render_width", None)
-        record.end = getattr(record, "end", "\n")
-        record.rich_highlight = bool(getattr(record, "rich_highlight", False))
+        record.render_prefix = (
+            getattr(record, "render_prefix", True)
+            if "render_prefix" in metadata
+            else True
+        )
+        record.render_width = (
+            getattr(record, "render_width", None)
+            if "render_width" in metadata
+            else None
+        )
+        record.end = getattr(record, "end", "\n") if "end" in metadata else "\n"
+        record.rich_highlight = bool(
+            getattr(record, "rich_highlight", False)
+            if "rich_highlight" in metadata
+            else False
+        )
 
+        record.formatted_stack = record.stack_info or ""
         if record.exc_info:
             record.formatted_exception = "".join(
                 traceback.format_exception(*record.exc_info)
@@ -438,6 +474,7 @@ class _ProducerFilter(logging.Filter):
             record.exception_data = getattr(record, "exception_data", None)
             record.rich_traceback = getattr(record, "rich_traceback", None)
 
+        record._logurich_prepared = True
         return True
 
     @staticmethod
@@ -452,14 +489,34 @@ class _ProducerFilter(logging.Filter):
 
 
 class _OutputFilter(logging.Filter):
-    """Apply logger-level and per-module level filtering."""
+    """Apply the configured global and per-module levels."""
 
     def filter(self, record: logging.LogRecord) -> bool:
         return record.levelno >= _resolve_level_for_record(record.name)
 
 
 class _LogurichQueueHandler(logging.handlers.QueueHandler):
-    """Queue handler that preserves enriched log record attributes."""
+    """Queue handler preserving serialisable Rich values for the listener."""
+
+    @staticmethod
+    def _safe_renderables(record: logging.LogRecord) -> tuple[Any, ...]:
+        safe: list[Any] = []
+        for renderable in getattr(record, "renderables", ()):
+            try:
+                pickle.dumps(renderable)
+            except Exception:
+                safe.append(rich_to_str(renderable, ansi=False, end="").rstrip("\n"))
+            else:
+                safe.append(renderable)
+        return tuple(safe)
+
+    @staticmethod
+    def _requires_pickle_validation(record: logging.LogRecord) -> bool:
+        """Return whether the normalised record retains non-standard values."""
+
+        return bool(
+            record.context or record.renderables or record.rich_traceback is not None
+        )
 
     def prepare(self, record: logging.LogRecord) -> logging.LogRecord:
         prepared = copy.copy(record)
@@ -470,68 +527,38 @@ class _LogurichQueueHandler(logging.handlers.QueueHandler):
         prepared.exc_info = None
         prepared.exc_text = None
         prepared.stack_info = None
+        if not self._requires_pickle_validation(prepared):
+            return prepared
+        try:
+            pickle.dumps(prepared)
+        except Exception as error:
+            if not prepared.renderables:
+                raise TypeError(
+                    "LogRecord cannot be sent through the multiprocessing queue; "
+                    "use serialisable context values"
+                ) from error
+
+            prepared.renderables = self._safe_renderables(prepared)
+            try:
+                pickle.dumps(prepared)
+            except Exception as fallback_error:
+                raise TypeError(
+                    "LogRecord cannot be sent through the multiprocessing queue; "
+                    "use serialisable context values"
+                ) from fallback_error
         return prepared
 
 
 _PRODUCER_FILTER = _ProducerFilter()
 _OUTPUT_FILTER = _OutputFilter()
 
-LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-LOG_LEVEL_CHOICES: tuple[str, ...] = get_args(LogLevel)
 
-
-def ctx(
-    value: Any,
-    *,
-    style: Optional[str] = None,
-    value_style: Optional[str] = None,
-    bracket_style: Optional[str] = None,
-    label: Optional[str] = None,
-    show_key: Optional[bool] = None,
-) -> ContextValue:
-    """Build a ``ContextValue`` helper for structured context logging."""
-
-    effective_value_style = value_style if value_style is not None else style
-    return ContextValue(
-        value=value,
-        value_style=effective_value_style,
-        bracket_style=bracket_style,
-        label=label,
-        show_key=bool(show_key) if show_key is not None else False,
-    )
-
-
-@contextlib.contextmanager
-def global_context_configure(**kwargs: Any):
-    """Temporarily configure scoped context for the current execution context."""
-
-    updated = _get_context_state()
-    for key, value in kwargs.items():
-        normalized_key = _normalize_context_key(key)
-        normalized_value = _coerce_context_value(value)
-        if normalized_value is None:
-            updated.pop(normalized_key, None)
-            continue
-        updated[normalized_key] = normalized_value
-    token = _context_state.set(updated)
-    try:
-        yield
-    finally:
-        _context_state.reset(token)
-
-
-def global_context_set(**kwargs: Any) -> None:
-    """Set scoped context for subsequent log records in the current process."""
-
-    updated = _get_context_state()
-    for key, value in kwargs.items():
-        normalized_key = _normalize_context_key(key)
-        normalized_value = _coerce_context_value(value)
-        if normalized_value is None:
-            updated.pop(normalized_key, None)
-            continue
-        updated[normalized_key] = normalized_value
-    _context_state.set(updated)
+def _load_env_extra() -> dict[str, str]:
+    env_extra: dict[str, str] = {}
+    for name, value in os.environ.items():
+        if name.startswith("LOGURICH_EXTRA_"):
+            env_extra[name.removeprefix("LOGURICH_EXTRA_")] = value
+    return env_extra
 
 
 def _unique_handlers(*groups: list[logging.Handler]) -> list[logging.Handler]:
@@ -554,28 +581,37 @@ def _close_handlers(handlers: list[logging.Handler]) -> None:
             handler.close()
 
 
-def _remove_handlers(logger_: logging.Logger) -> list[logging.Handler]:
-    handlers = list(logger_.handlers)
+def _remove_installed_handlers() -> list[logging.Handler]:
+    root = logging.getLogger()
+    handlers = list(logger_state.get("installed_handlers") or ())
     for handler in handlers:
-        logger_.removeHandler(handler)
+        root.removeHandler(handler)
     return handlers
 
 
-def _build_console_handler(
-    log_verbose: int, *, rich_handler: bool, serialize: bool
-) -> logging.Handler:
-    renderer = LogurichRenderer(log_verbose)
-    if serialize or not rich_handler:
-        handler: logging.Handler = CustomHandler(renderer, serialize=serialize)
-    else:
-        handler = CustomRichHandler(
-            renderer,
-            rich_tracebacks=True,
-            markup=True,
-            tracebacks_show_locals=True,
-        )
+def _configure_handler(handler: logging.Handler, *, producer: bool) -> None:
     handler.setLevel(logging.NOTSET)
     handler.addFilter(_OUTPUT_FILTER)
+    if producer:
+        handler.addFilter(_PRODUCER_FILTER)
+
+
+def _build_console_handler(log_verbose: int, *, mode: str) -> logging.Handler:
+    renderer = LogurichRenderer(log_verbose)
+    if mode == "rich":
+        try:
+            handler: logging.Handler = CustomRichHandler(
+                renderer,
+                rich_tracebacks=True,
+                markup=True,
+                tracebacks_show_locals=True,
+            )
+        except RichLayoutUnavailable as error:
+            warnings.warn(f"{error}; falling back to console='plain'", stacklevel=3)
+            handler = CustomHandler(renderer, serialize=False)
+    else:
+        handler = CustomHandler(renderer, serialize=mode == "json")
+    _configure_handler(handler, producer=False)
     return handler
 
 
@@ -598,7 +634,7 @@ def _build_file_handler(
     log_path: Path,
     *,
     log_verbose: int,
-    serialize: bool,
+    mode: str,
     rotation: Optional[Union[str, int]],
     retention: Optional[int],
 ) -> logging.Handler:
@@ -639,26 +675,25 @@ def _build_file_handler(
             "rotation must be None, an integer, 'midnight', or a string in HH:MM format"
         )
 
-    handler.setLevel(logging.NOTSET)
     handler.setFormatter(
-        LogurichFileFormatter(LogurichRenderer(log_verbose), serialize=serialize)
+        LogurichFileFormatter(LogurichRenderer(log_verbose), serialize=mode == "json")
     )
-    handler.addFilter(_OUTPUT_FILTER)
+    handler.terminator = ""  # type: ignore[attr-defined]
+    _configure_handler(handler, producer=False)
     return handler
 
 
 def shutdown_logger() -> None:
-    """Stop queue listeners and close all configured handlers."""
+    """Stop Logurich's listener and close only handlers owned by Logurich."""
 
     listener = logger_state.get("listener")
     if listener is not None:
-        listener.stop()
+        with contextlib.suppress(Exception):
+            listener.stop()
 
-    root = logging.getLogger()
-    root_handlers = _remove_handlers(root)
-    logger_handlers = _remove_handlers(_internal_logger)
+    installed_handlers = _remove_installed_handlers()
     final_handlers = list(logger_state.get("final_handlers") or ())
-    _close_handlers(_unique_handlers(root_handlers, logger_handlers, final_handlers))
+    _close_handlers(_unique_handlers(installed_handlers, final_handlers))
 
     queue = logger_state.get("queue")
     if queue is not None:
@@ -666,6 +701,10 @@ def shutdown_logger() -> None:
             queue.close()
         with contextlib.suppress(Exception):
             queue.join_thread()
+
+    original_root_level = logger_state.get("original_root_level")
+    if original_root_level is not None:
+        logging.getLogger().setLevel(original_root_level)
 
     logger_state.update(
         {
@@ -675,15 +714,16 @@ def shutdown_logger() -> None:
             "queue": None,
             "listener": None,
             "final_handlers": (),
+            "installed_handlers": (),
             "env_extra": {},
+            "output_modes": None,
+            "original_root_level": None,
         }
     )
-    _context_state.set({})
+    clear_context()
 
 
 def _ensure_shutdown_atexit_registered() -> None:
-    """Register ``shutdown_logger`` once so handlers are flushed on process exit."""
-
     if logger_state.get("atexit_registered"):
         return
     atexit.register(shutdown_logger)
@@ -691,21 +731,17 @@ def _ensure_shutdown_atexit_registered() -> None:
 
 
 def _ensure_shutdown_threading_atexit_registered() -> None:
-    """Register ``shutdown_logger`` before interpreter thread shutdown when possible."""
-
     if logger_state.get("threading_atexit_registered"):
         return
-
     register = getattr(threading, "_register_atexit", None)
     if register is None:
         return
-
     register(shutdown_logger)
     logger_state["threading_atexit_registered"] = True
 
 
 def get_log_queue() -> mp.Queue:
-    """Return the active multiprocessing queue used for logging."""
+    """Return the active multiprocessing logging queue."""
 
     queue = logger_state.get("queue")
     if queue is None:
@@ -715,21 +751,59 @@ def get_log_queue() -> mp.Queue:
     return queue
 
 
-def configure_child_logging(queue: mp.Queue, logger_name: str = "logurich") -> None:
-    """Configure a child process to forward logs to the parent logging queue."""
+def get_log_levels() -> LogLevels:
+    """Return the configured levels, to hand to ``configure_child_logging``."""
+
+    min_level = logger_state.get("min_level")
+    if min_level is None:
+        raise RuntimeError("Logging is not configured. Call init_logger() first.")
+    level_by_module = logger_state.get("level_by_module")
+    return (min_level, dict(level_by_module) if level_by_module else None)
+
+
+def _level_floor(min_level: int, level_by_module: Optional[Mapping[str, int]]) -> int:
+    """Return the lowest level that any configured logger may emit."""
+
+    return min([min_level, *(level_by_module or {}).values()])
+
+
+def _apply_child_levels(levels: Optional[LogLevels], root: logging.Logger) -> None:
+    """Adopt the parent's levels so the worker filters before building records."""
+
+    if levels is None:
+        root.setLevel(logging.NOTSET)
+        return
+
+    min_level, level_by_module = levels
+    logger_state.update({"min_level": min_level, "level_by_module": level_by_module})
+    # Permissive floor only; _OUTPUT_FILTER still applies the per-module levels.
+    root.setLevel(_level_floor(min_level, level_by_module))
+
+
+def configure_child_logging(
+    queue: mp.Queue,
+    logger_name: str = "logurich",
+    *,
+    levels: Optional[LogLevels] = None,
+) -> None:
+    """Forward a worker's stdlib records to the parent's Logurich queue.
+
+    Pass ``levels=get_log_levels()`` from the parent to drop filtered records in
+    the worker; without it the worker enqueues everything and the parent filters.
+    """
 
     root = logging.getLogger()
-    _close_handlers(_remove_handlers(root))
+    inherited_handlers = list(root.handlers)
+    for handler in inherited_handlers:
+        root.removeHandler(handler)
+    _close_handlers(inherited_handlers)
 
     queue_handler = _LogurichQueueHandler(queue)
-    queue_handler.setLevel(logging.NOTSET)
-    queue_handler.addFilter(_PRODUCER_FILTER)
-
+    _configure_handler(queue_handler, producer=True)
     root.addHandler(queue_handler)
-    root.setLevel(logging.NOTSET)
+    _apply_child_levels(levels, root)
 
     child_logger = logging.getLogger(logger_name)
-    _close_handlers(_remove_handlers(child_logger))
     child_logger.setLevel(logging.NOTSET)
     child_logger.propagate = True
 
@@ -738,25 +812,55 @@ def configure_child_logging(queue: mp.Queue, logger_name: str = "logurich") -> N
             "queue": queue,
             "listener": None,
             "final_handlers": (),
+            "installed_handlers": (queue_handler,),
         }
     )
 
 
+def _warn_legacy_environment(env: Mapping[str, str]) -> None:
+    legacy = [name for name in ("LOGURICH_RICH", "LOGURICH_SERIALIZE") if name in env]
+    if legacy:
+        names = ", ".join(legacy)
+        verb = "are" if len(legacy) > 1 else "is"
+        warnings.warn(
+            f"{names} {verb} no longer supported and {verb} ignored; use "
+            "LOGURICH_OUTPUT and the console/file arguments",
+            stacklevel=3,
+        )
+
+
 def init_logger(
-    log_level: LogLevel,
+    log_level: Union[LogLevel, str, int],
     log_verbose: int = 0,
     log_filename: Optional[str] = None,
     log_folder: str = "logs",
     level_by_module: Optional[Mapping[str, Union[str, int]]] = None,
     *,
-    rich_handler: bool = False,
+    console: ConsoleMode = "plain",
+    file: FileMode = "text",
     enqueue: bool = True,
     highlight: bool = False,
     rotation: Optional[Union[str, int]] = "12:00",
     retention: Optional[int] = 10,
     force: bool = False,
 ) -> Optional[str]:
-    """Initialize stdlib logging with optional Rich rendering and queue support."""
+    """Configure stdlib logging with independent console and file formats.
+
+    ``LOGURICH_OUTPUT``, when set, takes precedence over ``console`` and does
+    not affect ``file``.
+    """
+
+    _warn_legacy_environment(os.environ)
+    modes = _resolve_output_modes(
+        console=console,
+        file=file,
+        is_terminal=rich_get_console().is_terminal,
+        env=os.environ,
+    )
+    min_level = _coerce_level(log_level)
+    module_levels = (
+        _configure_level_by_module(level_by_module) if level_by_module else None
+    )
 
     if not force and logger_state.get("min_level") is not None:
         return None
@@ -765,20 +869,11 @@ def init_logger(
     _ensure_shutdown_atexit_registered()
     shutdown_logger()
 
-    env_rich_handler = parse_bool_env("LOGURICH_RICH")
-    if env_rich_handler is not None:
-        rich_handler = env_rich_handler
-
-    serialize = bool(parse_bool_env("LOGURICH_SERIALIZE"))
-    min_level = _coerce_level(log_level)
-    module_levels = (
-        _configure_level_by_module(level_by_module) if level_by_module else None
-    )
-
     root = logging.getLogger()
-    root.setLevel(logging.NOTSET)
-    _internal_logger.setLevel(logging.NOTSET)
-    _internal_logger.propagate = True
+    original_root_level = root.level
+    # Reject records below every configured threshold before constructing them.
+    # _OUTPUT_FILTER still applies the exact per-module level at the handler.
+    root.setLevel(_level_floor(min_level, module_levels))
 
     logger_state.update(
         {
@@ -786,12 +881,12 @@ def init_logger(
             "level_by_module": module_levels,
             "rich_highlight": highlight,
             "env_extra": _load_env_extra(),
+            "output_modes": modes,
+            "original_root_level": original_root_level,
         }
     )
 
-    console_handler = _build_console_handler(
-        log_verbose, rich_handler=rich_handler, serialize=serialize
-    )
+    console_handler = _build_console_handler(log_verbose, mode=modes.console)
     final_handlers: list[logging.Handler] = [console_handler]
 
     log_path: Optional[str] = None
@@ -803,19 +898,20 @@ def init_logger(
             _build_file_handler(
                 file_path,
                 log_verbose=log_verbose,
-                serialize=serialize,
+                mode=modes.file,
                 rotation=rotation,
                 retention=retention,
             )
         )
         log_path = str(file_path.resolve())
 
+    installed_handlers: list[logging.Handler]
     if enqueue:
         queue = mp.Queue()
         queue_handler = _LogurichQueueHandler(queue)
-        queue_handler.setLevel(logging.NOTSET)
-        queue_handler.addFilter(_PRODUCER_FILTER)
+        _configure_handler(queue_handler, producer=True)
         root.addHandler(queue_handler)
+        installed_handlers = [queue_handler]
 
         listener = logging.handlers.QueueListener(
             queue,
@@ -823,23 +919,18 @@ def init_logger(
             respect_handler_level=True,
         )
         listener.start()
-        logger_state.update(
-            {
-                "queue": queue,
-                "listener": listener,
-                "final_handlers": tuple(final_handlers),
-            }
-        )
+        logger_state.update({"queue": queue, "listener": listener})
     else:
         for handler in final_handlers:
             handler.addFilter(_PRODUCER_FILTER)
             root.addHandler(handler)
-        logger_state.update(
-            {
-                "queue": None,
-                "listener": None,
-                "final_handlers": tuple(final_handlers),
-            }
-        )
+        installed_handlers = final_handlers
+        logger_state.update({"queue": None, "listener": None})
 
+    logger_state.update(
+        {
+            "final_handlers": tuple(final_handlers),
+            "installed_handlers": tuple(installed_handlers),
+        }
+    )
     return log_path

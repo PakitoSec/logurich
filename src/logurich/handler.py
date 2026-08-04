@@ -5,12 +5,14 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timedelta
+from importlib.metadata import version as metadata_version
 from logging import Formatter, Handler, LogRecord
 from pathlib import Path
 from time import perf_counter
 from typing import TYPE_CHECKING, Any, Union
 
-from rich.console import ConsoleRenderable
+from rich.console import ConsoleRenderable, Group
+from rich.constrain import Constrain
 from rich.highlighter import ReprHighlighter
 from rich.logging import RichHandler
 from rich.pretty import Pretty
@@ -33,6 +35,7 @@ LOGURICH_INTERNAL_RECORD_ATTRS = frozenset(
         "end",
         "exception_data",
         "formatted_exception",
+        "formatted_stack",
         "message",
         "render_prefix",
         "render_width",
@@ -50,10 +53,11 @@ def _safe_text_from_markup(value: str) -> Text:
         return Text(value)
 
 
-def _context_display_name(name: str) -> str:
-    if name.startswith("context::"):
-        return name.split("::", 1)[1]
-    return name
+def _installed_rich_version() -> str:
+    try:
+        return metadata_version("rich")
+    except Exception:
+        return "(unknown version)"
 
 
 class LogurichRenderer:
@@ -75,13 +79,10 @@ class LogurichRenderer:
         list_context: list[str] = []
         context = getattr(record, "context", {}) or {}
         for name, value in context.items():
-            display_name = _context_display_name(name)
             if hasattr(value, "render"):
-                list_context.append(
-                    value.render(display_name, is_rich_handler=is_rich_handler)
-                )
+                list_context.append(value.render(name, is_rich_handler=is_rich_handler))
             else:
-                list_context.append(f"[{display_name}={value}]")
+                list_context.append(f"[{name}={value}]")
         return list_context
 
     def build_prefix(self, record: LogRecord) -> str:
@@ -109,10 +110,13 @@ class LogurichRenderer:
         ).plain
         message_plain = _safe_text_from_markup(record.getMessage()).plain
         exception_text = getattr(record, "formatted_exception", "").rstrip("\n")
+        stack_text = getattr(record, "formatted_stack", "").rstrip("\n")
 
         parts: list[str] = []
         if message_plain or not self._renderables(record):
             line = f"{prefix_plain}{context_plain}{message_plain}"
+            if stack_text:
+                line = f"{line}\n{stack_text}" if line else stack_text
             if exception_text:
                 line = f"{line}\n{exception_text}" if line else exception_text
             parts.append(line)
@@ -204,10 +208,7 @@ class LogurichRenderer:
         if user_extra:
             serialized.update(user_extra)
         serialized.update(
-            {
-                _context_display_name(key): getattr(value, "value", value)
-                for key, value in context.items()
-            }
+            {key: getattr(value, "value", value) for key, value in context.items()}
         )
         return serialized
 
@@ -242,8 +243,16 @@ class LogurichFileFormatter(Formatter):
 
     def format(self, record: LogRecord) -> str:
         if self.serialize:
-            return self.renderer.format_json(record)
-        return self.renderer.format_file(record)
+            formatted = self.renderer.format_json(record)
+            end = "\n"
+        else:
+            formatted = self.renderer.format_file(record)
+            end = getattr(record, "end", "\n")
+        return f"{formatted}{end}"
+
+
+class RichLayoutUnavailable(RuntimeError):
+    """Raised when Rich no longer exposes the log layout ``console='rich'`` needs."""
 
 
 class CustomRichHandler(RichHandler):
@@ -254,6 +263,11 @@ class CustomRichHandler(RichHandler):
     ) -> None:
         self.renderer = renderer
         super().__init__(*args, console=rich_get_console(), **kwargs)
+        if not callable(getattr(self, "_log_render", None)):
+            raise RichLayoutUnavailable(
+                f"rich {_installed_rich_version()} does not provide "
+                "RichHandler._log_render, which console='rich' renders through"
+            )
 
     def build_content(self, record: LogRecord, content: RenderableType) -> Table:
         row: list[Union[str, RenderableType]] = []
@@ -282,28 +296,80 @@ class CustomRichHandler(RichHandler):
         log_time = datetime.fromtimestamp(record.created)
         rich_tb = getattr(record, "rich_traceback", None)
         renderables = list(self.renderer._renderables(record))
-        output: list[RenderableType] = []
+        message_output: list[RenderableType] = []
+        rich_output: list[RenderableType] = []
+        diagnostic_output: list[RenderableType] = []
+        render_width = getattr(record, "render_width", None)
 
         if record.getMessage():
-            output.append(self.build_content(record, message_renderable))
+            message_output.append(self.build_content(record, message_renderable))
         for item in renderables:
             if isinstance(item, (ConsoleRenderable, str)):
-                output.append(item)
+                renderable: RenderableType = item
             else:
-                output.append(Pretty(item))
+                renderable = Pretty(item)
+            if render_width is not None:
+                renderable = Constrain(renderable, width=render_width)
+            rich_output.append(renderable)
+        stack_text = getattr(record, "formatted_stack", "").rstrip("\n")
+        if stack_text and record.stack_info is None:
+            diagnostic_output.append(Text(stack_text))
         if rich_tb is not None:
-            output.append(rich_tb)
+            diagnostic_output.append(rich_tb)
 
-        return self._log_render(
-            self.console,
-            output,
-            log_time=log_time,
-            time_format=time_format,
-            level=level,
-            path=path,
-            line_no=record.lineno,
-            link_path=record.pathname if self.enable_link_path else None,
-        )
+        render_prefix = getattr(record, "render_prefix", True)
+        if render_prefix or not renderables:
+            return self._log_render(
+                self.console,
+                message_output + rich_output + diagnostic_output,
+                log_time=log_time,
+                time_format=time_format,
+                level=level,
+                path=path,
+                line_no=record.lineno,
+                link_path=record.pathname if self.enable_link_path else None,
+            )
+
+        result: list[RenderableType] = []
+        if message_output or diagnostic_output:
+            result.append(
+                self._log_render(
+                    self.console,
+                    message_output + diagnostic_output,
+                    log_time=log_time,
+                    time_format=time_format,
+                    level=level,
+                    path=path,
+                    line_no=record.lineno,
+                    link_path=record.pathname if self.enable_link_path else None,
+                )
+            )
+        result.extend(rich_output)
+        return Group(*result)
+
+    def emit(self, record: LogRecord) -> None:
+        """Emit with the per-record ``end`` contract used by ``logger.rich``.
+
+        Derived from ``rich.logging.RichHandler.emit``, which hardcodes
+        ``end="\\n"``, and relies on the private ``_log_render`` attribute.
+        """
+
+        try:
+            message = self.format(record)
+            if getattr(record, "rich_traceback", None) is not None and record.exc_info:
+                message = record.getMessage()
+                if self.formatter is not None:
+                    record.message = message
+                    message = self.formatter.formatMessage(record)
+            message_renderable = self.render_message(record, message)
+            log_renderable = self.render(
+                record=record,
+                traceback=None,
+                message_renderable=message_renderable,
+            )
+            self.console.print(log_renderable, end=getattr(record, "end", "\n"))
+        except Exception:
+            self.handleError(record)
 
 
 class CustomHandler(Handler):
@@ -326,13 +392,14 @@ class CustomHandler(Handler):
         try:
             if self.serialize:
                 payload = self.renderer.format_json(record)
-                self._console.out(payload, highlight=False, end=end)
+                self._console.out(payload, highlight=False, end="\n")
                 return
 
             prefix = self.renderer.build_prefix(record)
             list_context = self.renderer.build_context(record, is_rich_handler=False)
             renderables = self.renderer._renderables(record)
             exception_text = getattr(record, "formatted_exception", "").rstrip("\n")
+            stack_text = getattr(record, "formatted_stack", "").rstrip("\n")
 
             if record.getMessage():
                 output_text = _safe_text_from_markup(prefix)
@@ -344,6 +411,9 @@ class CustomHandler(Handler):
                 if self._should_highlight(record):
                     message_text = self.highlighter(message_text)
                 output_text.append_text(message_text)
+                if stack_text:
+                    output_text.append("\n")
+                    output_text.append_text(Text(stack_text))
                 if exception_text:
                     output_text.append("\n")
                     output_text.append_text(Text(exception_text))
@@ -353,8 +423,11 @@ class CustomHandler(Handler):
                     highlight=False,
                     soft_wrap=True,
                 )
-            elif exception_text:
-                self._console.print(Text(exception_text), end=end, highlight=False)
+            elif stack_text or exception_text:
+                diagnostic = "\n".join(
+                    part for part in (stack_text, exception_text) if part
+                )
+                self._console.print(Text(diagnostic), end=end, highlight=False)
 
             if renderables:
                 rendered = rich_console_renderer(

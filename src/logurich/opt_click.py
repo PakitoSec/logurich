@@ -13,14 +13,19 @@ from typing import Any, Optional, TypeVar
 
 import click
 
-from . import LOG_LEVEL_CHOICES, init_logger, shutdown_logger
+from . import (
+    CONSOLE_MODE_CHOICES,
+    LOG_LEVEL_CHOICES,
+    init_logger,
+    shutdown_logger,
+)
 
 LOGGER_PARAM_NAMES = (
     "logger_level",
     "logger_verbose",
     "logger_filename",
     "logger_level_by_module",
-    "logger_rich",
+    "logger_console",
 )
 _CLICK_SHUTDOWN_META_KEY = "logurich_shutdown_registered"
 _logger = logging.getLogger(__name__)
@@ -36,7 +41,7 @@ def click_logger_params(func: F) -> F:
     - ``-v, --logger-verbose``: Increase verbosity (can be used multiple times)
     - ``--logger-filename``: Enable file logging with specified filename
     - ``--logger-level-by-module``: Set specific log levels per module
-    - ``--logger-rich``: Enable Rich handler for enhanced console output
+    - ``--logger-console``: Select plain, Rich, JSON, or automatic console output
 
     The decorator initializes the logger before the command function executes.
 
@@ -84,11 +89,11 @@ def click_logger_params(func: F) -> F:
         type=(str, str),
     )
     @click.option(
-        "--logger-rich",
-        is_flag=True,
-        help="Enable rich handler for enhanced console output",
-        type=bool,
-        default=False,
+        "--logger-console",
+        help="Console output mode; LOGURICH_OUTPUT takes precedence when set",
+        type=click.Choice(CONSOLE_MODE_CHOICES, case_sensitive=False),
+        default="plain",
+        show_default=True,
     )
     @functools.wraps(func)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -111,7 +116,7 @@ def click_logger_init(
     logger_verbose: int,
     logger_filename: Optional[str],
     logger_level_by_module: tuple[tuple[str, str], ...],
-    logger_rich: bool,
+    logger_console: str,
 ) -> None:
     """Initialize the logger with parameters from Click CLI options.
 
@@ -123,7 +128,7 @@ def click_logger_init(
         logger_verbose: Verbosity level (0-3).
         logger_filename: Path to log file, or None for console-only logging.
         logger_level_by_module: Tuple of (module_name, level) pairs for per-module levels.
-        logger_rich: Whether to use Rich handler for enhanced console output.
+        logger_console: Console output mode (auto, rich, plain, or json).
 
     Example:
         This function is typically not called directly. It's invoked by the
@@ -137,7 +142,7 @@ def click_logger_init(
         logger_verbose,
         log_filename=logger_filename,
         level_by_module=lbm,
-        rich_handler=logger_rich,
+        console=logger_console,
     )
     click_ctx = click.get_current_context(silent=True)
     if click_ctx is not None and not click_ctx.meta.get(_CLICK_SHUTDOWN_META_KEY):
@@ -148,4 +153,4 @@ def click_logger_init(
     _logger.debug("Log filename:         %s", logger_filename)
     _logger.debug("Log path:             %s", log_path)
     _logger.debug("Log level by module:  %s", lbm)
-    _logger.debug("Log rich handler:     %s", logger_rich)
+    _logger.debug("Log console mode:     %s", logger_console)

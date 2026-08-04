@@ -8,6 +8,7 @@ from rich.table import Table
 from logurich import (
     configure_child_logging,
     ctx,
+    get_log_levels,
     get_log_queue,
     get_logger,
     global_context_configure,
@@ -15,11 +16,11 @@ from logurich import (
 )
 
 
-def worker_function(log_queue, worker_id):
-    configure_child_logging(log_queue)
+def worker_function(log_queue, log_levels, worker_id):
+    configure_child_logging(log_queue, levels=log_levels)
     logger = get_logger(f"workers.{worker_id}")
 
-    with global_context_configure(worker=ctx(f"Worker-{worker_id}", show_key=True)):
+    with global_context_configure(worker=ctx(f"Worker-{worker_id}")):
         logger.info("Worker %s starting", worker_id)
         logger.debug("Worker %s debug message", worker_id)
 
@@ -29,59 +30,47 @@ def worker_function(log_queue, worker_id):
         table.add_row("Process ID", str(mp.current_process().pid))
         table.add_row("Random Value", str(random.randint(1, 100)))
 
-        logger.info(
-            "Worker %s status",
-            worker_id,
-            extra={
-                "renderables": (
-                    Panel(
-                        f"Worker {worker_id} is processing data",
-                        border_style="green",
-                    ),
-                    table,
-                )
-            },
+        logger.rich(
+            "INFO",
+            Panel(
+                f"Worker {worker_id} is processing data",
+                border_style="green",
+            ),
+            table,
+            title=f"Worker {worker_id} status",
         )
 
         for i in range(3):
             logger.info("Worker %s step %s/3", worker_id, i + 1)
             time.sleep(random.uniform(0.1, 0.5))
 
-        logger.info(
-            "Worker %s completed successfully",
-            worker_id,
-            extra={
-                "renderables": (
-                    Panel(
-                        f"Worker {worker_id} completed successfully",
-                        border_style="bold green",
-                    ),
-                )
-            },
+        logger.rich(
+            "INFO",
+            Panel(
+                f"Worker {worker_id} completed successfully",
+                border_style="bold green",
+            ),
+            title=f"Worker {worker_id} completed successfully",
         )
 
 
 def main() -> None:
     init_logger("INFO", log_verbose=2, enqueue=True)
     log_queue = get_log_queue()
+    log_levels = get_log_levels()
 
     get_logger("main").info("Multiprocessing example starting")
 
-    with global_context_configure(
-        process=ctx("Main-Process", style="magenta", show_key=True)
-    ):
+    with global_context_configure(process=ctx("Main-Process", style="magenta")):
         processes = [
-            mp.Process(target=worker_function, args=(log_queue, i + 1))
+            mp.Process(target=worker_function, args=(log_queue, log_levels, i + 1))
             for i in range(3)
         ]
 
-        get_logger("main").info(
-            "Starting worker processes",
-            extra={
-                "renderables": (
-                    Panel("Starting worker processes", border_style="blue"),
-                )
-            },
+        get_logger("main").rich(
+            "INFO",
+            Panel("Starting worker processes", border_style="blue"),
+            title="Starting worker processes",
         )
 
         for process in processes:
@@ -95,10 +84,7 @@ def main() -> None:
         for index, process in enumerate(processes, start=1):
             table.add_row(f"Worker {index}", str(process.pid), "Running")
 
-        get_logger("main").info(
-            "Workers started",
-            extra={"renderables": (table,)},
-        )
+        get_logger("main").rich("INFO", table, title="Workers started")
 
         for index, process in enumerate(processes, start=1):
             process.join()

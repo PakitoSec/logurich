@@ -9,7 +9,10 @@ logger_state: dict[str, Any] = {
     "queue": None,
     "listener": None,
     "final_handlers": (),
+    "installed_handlers": (),
     "env_extra": {},
+    "output_modes": None,
+    "original_root_level": None,
     "atexit_registered": False,
     "threading_atexit_registered": False,
 }

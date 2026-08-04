@@ -1,9 +1,8 @@
-import logging
 from io import StringIO
 
 import pytest
 
-from logurich import init_logger, shutdown_logger
+from logurich import get_logger, init_logger, shutdown_logger
 from logurich.console import rich_configure_console
 
 
@@ -21,14 +20,14 @@ def logger(request):
         "level": "INFO",
         "verbose": 0,
         "enqueue": False,
-        "rich_handler": False,
+        "console": "plain",
     }
     cfg = {**default_cfg, **getattr(request, "param", {})}
     init_logger(
         cfg["level"],
         log_verbose=cfg["verbose"],
         enqueue=cfg["enqueue"],
-        rich_handler=cfg["rich_handler"],
+        console=cfg["console"],
     )
-    yield logging.getLogger("tests.fixture")
+    yield get_logger("tests.fixture")
     shutdown_logger()
