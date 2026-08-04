@@ -1,7 +1,7 @@
 from rich.panel import Panel
 from rich.table import Table
 
-from logurich import ctx, get_logger, init_logger
+from logurich import get_logger, init_logger
 
 
 def create_rich_table() -> Table:
@@ -19,14 +19,11 @@ if __name__ == "__main__":
 
     logger.info("This is a basic log message")
     logger.info("Hello %s", "world")
-    logger.info(
-        "Structured output",
-        extra={
-            "renderables": (
-                Panel("Rich panel content", border_style="green"),
-                create_rich_table(),
-            )
-        },
+    logger.rich(
+        "INFO",
+        Panel("Rich panel content", border_style="green"),
+        create_rich_table(),
+        title="Structured output",
     )
 
     with logger.contextualize(app=logger.ctx("example", style="yellow")):
@@ -34,7 +31,7 @@ if __name__ == "__main__":
 
     logger.info(
         "This log has per-call context",
-        extra={"context": {"session": ctx("sess-42", style="cyan", show_key=True)}},
+        session=logger.ctx("sess-42", style="cyan"),
     )
 
     try:
@@ -44,13 +41,13 @@ if __name__ == "__main__":
 
     # ── bind() ── per-instance context ──────────────────────────────
     api_logger = logger.bind(
-        ctx_module=logger.ctx("API", style="magenta"),
+        module=logger.ctx("API", style="magenta"),
     )
     api_logger.info("Request received")
     api_logger.info("Processing complete")
 
     # Chained bind
     req_logger = api_logger.bind(
-        request_id=ctx("req-99", style="cyan", show_key=True),
+        request_id=logger.ctx("req-99", style="cyan"),
     )
     req_logger.info("Handling request")

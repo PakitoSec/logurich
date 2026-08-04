@@ -1,166 +1,178 @@
 # logurich
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![PyPI version](https://img.shields.io/pypi/v/logurich.svg)](https://pypi.org/project/logurich/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
-A Python library combining standard logging and Rich for beautiful logging.
+Logurich combines standard-library logging with live Rich renderables, structured
+context, text and JSON output, and an optional multiprocessing queue.
 
 ## Installation
 
 ```bash
 pip install logurich
-pip install logurich[click]
+pip install "logurich[click]"
 ```
 
-## Usage
+## Quick start
 
 ```python
 from rich.panel import Panel
 
 from logurich import get_logger, init_logger
 
-init_logger("INFO", enqueue=False)
-
+init_logger("INFO", console="plain", file="json", enqueue=False)
 logger = get_logger(__name__)
 
-logger.info("This is a log message")
-logger.info("Hello %s", "world")
+logger.info("Processed %s items", 12, batch="b-42")
 
-logger.info(
-    "Rich renderables",
-    extra={
-        "renderables": (
-            Panel("Rich panel output", border_style="green"),
-        )
-    },
+request_logger = logger.bind(
+    request_id=logger.ctx("req-42", style="cyan")
 )
+request_logger.info("Request completed", duration_ms=17)
 
-with logger.contextualize(app=logger.ctx("demo", style="yellow")):
-    logger.info("This log has scoped context")
+with logger.contextualize(user_id="alice"):
+    logger.info("Authenticated")
 
-logger.info(
-    "Per-call context",
-    extra={
-        "context": {
-            "session": logger.ctx("sess-42", style="cyan", show_key=True),
-        }
-    },
+logger.rich(
+    "INFO",
+    Panel("Service ready", border_style="green"),
+    title="Startup",
+    prefix=True,
+    width=80,
 )
-
 ```
 
-For full IDE autocompletion of `ctx(...)`, `rich(...)`, `bind(...)`, and `contextualize(...)`, use `get_logger(...)` from logurich instead of `logging.getLogger(...)`. It returns the same logger instance but typed as `LogurichLogger`. `logger.ctx(...)` is shorthand for the existing module-level `ctx(...)` helper, and `logger.contextualize(...)` is a convenience alias for `global_context_configure(...)`. The module-level helpers remain supported if you prefer `global_context_configure(...)` or `extra={"context": {"key": ctx(...)}}`.
+Context values display their key (`[batch=b-42]`), whether they are raw or
+wrapped in `ctx()`. Use `ctx()` to apply a style, rename the key with `label=`,
+or hide it with `show_key=False`. Context precedence is:
 
-`logging.getLogger(...)` still works at runtime — only the typing differs.
+```text
+contextualize()/global context < bind() < per-call keywords
+```
 
-For short-lived scripts and CLIs, `init_logger()` automatically registers an `atexit` hook, so you do not need to call `shutdown_logger()` just to flush logs at process exit.
+Every keyword that is not one of stdlib's four (`exc_info`, `stack_info`,
+`stacklevel`, `extra`) is context; rendering options are parameters of
+`rich()`. To log a stdlib name as context, bind it: `logger.bind(exc_info=...)`.
 
-## Named Loggers
+`bind()`, `new()`, `unbind()`, and `try_unbind()` always return a new
+`LogurichLogger`; the original adapter is never mutated. `None` is a real
+context value. Remove bound values with `unbind()` or `try_unbind()`, remove
+selected ambient values with `global_context_unset()`, or clear all ambient
+values with `clear_context()`.
 
-Use the standard library to create named loggers:
+## Standard-library compatibility
+
+`get_logger(name)` returns an explicit `logging.LoggerAdapter` around
+`logging.getLogger(name)`. It preserves positional `%s` formatting,
+`exc_info`, `stack_info`, `stacklevel`, custom numeric levels, normal `extra`,
+and the usual logger properties and handler methods.
+
+Each call builds a new adapter, so `get_logger("app") is get_logger("app")` is
+`False` even though both wrap the same stdlib logger. Adapters are cheap and
+hold only their own bound context; level, handlers, and propagation live on the
+shared stdlib logger. Compare `logger.name` rather than adapter identity.
+
+Third-party loggers remain ordinary stdlib loggers:
 
 ```python
-from logurich import get_logger, init_logger
+import logging
 
-init_logger("INFO", enqueue=False)
-
-logger = get_logger(__name__)
-logger.info("Hello from %s", __name__)
+logging.getLogger("third.party").info(
+    "Request completed",
+    extra={"request_id": "req-42"},
+)
 ```
 
-Use `get_logger(...)` from logurich for typed access. `logging.getLogger(...)` still works at runtime.
+When Logurich is configured, flat third-party `extra` fields are displayed as
+context. Third-party loggers do not receive `.ctx()`, `.rich()`, `.bind()`, or
+`.contextualize()` methods. A reusable library should not call `init_logger()`;
+the application owns handler configuration and shutdown.
 
-## Using Logurich in Reusable Libraries
+## Output modes
 
-If you are writing a Python library that will be imported by another program, the library should not call `init_logger()` on its own. Let the main application own logging configuration, handler setup, and shutdown.
-
-Inside the library, use standard named loggers:
+Console and file formats are independent:
 
 ```python
-# mylib/service.py
-from rich.panel import Panel
-
-from logurich import ctx, get_logger
-
-logger = get_logger(__name__)
-
-
-def run_job(job_id: str) -> None:
-    logger.info(
-        "Starting job %s",
-        job_id,
-        extra={"context": {"job": ctx(job_id, style="cyan", show_key=True)}},
-    )
-    logger.info(
-        "Job details",
-        extra={
-            "renderables": (
-                Panel(f"Job {job_id} is running", border_style="green"),
-            )
-        },
-    )
+init_logger(
+    "INFO",
+    console="rich",       # auto | rich | plain | json
+    file="json",          # text | json
+    log_filename="app.log",
+)
 ```
 
-Then configure Logurich once in the main program:
+The defaults are `console="plain"` and `file="text"`.
 
-```python
-# main.py
-from logurich import init_logger
-from mylib.service import run_job
+`auto` answers "is a human reading this?", not "how pretty can output be": it
+resolves to plain text on a TTY and to JSON otherwise, and it never selects the
+Rich handler. Rich rendering changes how output is laid out, so it stays an
+explicit opt-in via `console="rich"`.
 
-init_logger("INFO", enqueue=False)
+When set, `LOGURICH_OUTPUT` always takes precedence over `console=` and
+`--logger-console`; it affects only the console mode. Unset the variable to
+honour the Python or CLI argument. An unrecognised value emits a `UserWarning`
+and falls back to the configured mode, so a typo in a shared environment cannot
+break startup. `LOGURICH_EXTRA_*` values continue to be included in JSON
+`record.extra`.
 
-run_job("job-42")
-```
+JSON and text-file output render Rich objects without ANSI escape codes. The
+JSON schema keeps the public `text` and `record` structure from Logurich 0.9.
 
-Guidelines for libraries:
+## Rich objects
 
-- Use `get_logger(__name__)` from logurich inside library modules.
-- Do not call `init_logger()` or `shutdown_logger()` from library code.
-- Emit normal stdlib log calls such as `logger.info("Value %s", value)`.
-- Use `extra={"context": ...}` and `extra={"renderables": ...}` only as optional metadata; they render nicely when the consuming application uses Logurich, and `logger.ctx(...)` / `logger.rich(...)` are also available when Logurich has been imported/configured by the application.
-- If the library starts worker processes and the application uses `enqueue=True`, accept the queue from the application and call `configure_child_logging(queue)` inside each worker process.
+`logger.rich(level, *renderables, title="", prefix=True, end="\n", width=None,
+highlight=False)` accepts strings and live Rich objects such as `Panel` and
+`Table`. Objects stay live until the destination handler renders them. The same
+method works after `bind()` and with direct or queued logging.
+
+For multiprocessing, serialisable Rich values reach the listener unchanged. If
+a renderable cannot be pickled, Logurich explicitly falls back to a plain,
+ANSI-free producer-side rendering; other unpicklable record values produce a
+clear logging error.
 
 ## Multiprocessing
 
-When `enqueue=True`, Logurich is process-safe only if worker processes send records through the shared logging queue created by the parent process.
+Only the parent process owns console and file handlers. Every worker must attach
+the shared queue explicitly:
 
 ```python
 import multiprocessing as mp
 
-from logurich import configure_child_logging, get_log_queue, get_logger, init_logger
+from logurich import (
+    LogLevels,
+    configure_child_logging,
+    get_log_levels,
+    get_log_queue,
+    get_logger,
+    init_logger,
+)
 
 
-def worker(log_queue: mp.Queue, worker_id: int) -> None:
-    configure_child_logging(log_queue)
-    get_logger(f"worker.{worker_id}").info("worker=%s ready", worker_id)
+def worker(log_queue: mp.Queue, log_levels: LogLevels, worker_id: int) -> None:
+    configure_child_logging(log_queue, levels=log_levels)
+    get_logger(f"worker.{worker_id}").info("Worker ready", worker=worker_id)
 
 
 def main() -> None:
     init_logger("INFO", enqueue=True)
-    log_queue = get_log_queue()
-
-    processes = [
-        mp.Process(target=worker, args=(log_queue, index), name=f"worker-{index}")
-        for index in range(3)
-    ]
-
-    for process in processes:
-        process.start()
-
-    for process in processes:
-        process.join()
-
+    queue = get_log_queue()
+    process = mp.Process(target=worker, args=(queue, get_log_levels(), 1))
+    process.start()
+    process.join()
 ```
 
-Only the process that calls `init_logger(..., enqueue=True)` owns the console and file handlers. Child processes must call `configure_child_logging(queue)` before logging.
+`levels` is optional: without it a worker enqueues every record and the parent
+applies the configured levels. Passing it lets the worker drop filtered records
+before they are built and sent.
 
-Call `shutdown_logger()` explicitly only when you need deterministic teardown before process exit, such as in tests or when reconfiguring logging multiple times in the same interpreter.
+Execution-local context follows `ContextVar` rules: asyncio tasks inherit it,
+but new threads and processes do not inherit it implicitly. Configure worker
+context inside each worker.
 
-## Click CLI helper
+## Click integration
 
-Install the optional Click extra to automatically expose logger configuration flags inside your commands:
+The optional decorator adds `--logger-level`, `--logger-verbose`,
+`--logger-filename`, `--logger-level-by-module`, and `--logger-console`:
 
 ```python
 import click
@@ -171,48 +183,26 @@ from logurich.opt_click import click_logger_params
 
 @click.command()
 @click_logger_params
-def cli():
-    logger = get_logger(__name__)
-    logger.info("Click integration ready!")
+def cli() -> None:
+    get_logger(__name__).info("Ready")
 ```
 
-The `click_logger_params` decorator injects `--logger-level`, `--logger-verbose`, `--logger-filename`, `--logger-level-by-module`, and `--logger-rich` flags and configures Logurich before your command logic runs. The usage example above is also available at `examples/click_cli.py`.
+Examples: `my-cli --logger-console rich` or
+`my-cli --logger-console auto`. The default is `plain`.
 
-## Idempotent initialisation (`force`)
+## Lifecycle
 
-By default, calling `init_logger()` a second time is a no-op — the existing configuration is kept and the call returns `None`. Pass `force=True` to tear down the current setup and reconfigure from scratch:
+Repeated `init_logger()` calls are no-ops unless `force=True` is supplied.
+Logurich registers shutdown hooks for short-lived programs; call
+`shutdown_logger()` when deterministic teardown is needed in tests or before
+reconfiguration.
 
-```python
-from logurich import init_logger
+Users upgrading from 0.9 should read the [v1 migration guide](docs/migration-v1.md).
 
-init_logger("INFO", enqueue=False)          # first call: configures logging
-init_logger("DEBUG", enqueue=False)         # no-op, returns None
-init_logger("DEBUG", enqueue=False, force=True)  # reconfigures logging
+## Development
+
+```bash
+uv sync --all-groups
+uv run pytest
+uv run ruff check .
 ```
-
-This is useful when tests or interactive sessions need to reset logging between runs.
-
-## User input
-
-The `user_input` module provides Rich-enhanced prompts with type coercion, hidden input, and optional timeouts. It does **not** depend on Click.
-
-```python
-from logurich import get_logger, init_logger, user_input, user_input_with_timeout
-
-init_logger("INFO", enqueue=False)
-logger = get_logger(__name__)
-
-# Basic string input
-name = user_input("Enter your name", type=str)
-
-# Integer input with a default value
-count = user_input("How many items?", type=int, default=5)
-
-# Hidden input (e.g. passwords)
-secret = user_input("Enter secret", type=str, hide_input=True)
-
-# Input with a timeout (5 seconds, Unix only — falls back to regular input on Windows)
-answer = user_input_with_timeout("Quick! Type something", timeout_duration=5)
-```
-
-A runnable example is available at `examples/user_input_example.py`.

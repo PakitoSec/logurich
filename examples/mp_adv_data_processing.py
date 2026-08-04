@@ -11,6 +11,7 @@ from rich.text import Text
 from logurich import (
     configure_child_logging,
     ctx,
+    get_log_levels,
     get_log_queue,
     get_logger,
     global_context_configure,
@@ -30,8 +31,8 @@ def generate_data(num_items):
     ]
 
 
-def init_worker(log_queue):
-    configure_child_logging(log_queue)
+def init_worker(log_queue, log_levels):
+    configure_child_logging(log_queue, levels=log_levels)
 
 
 def process_item(item):
@@ -49,18 +50,14 @@ def process_item(item):
             for key, value in item.items():
                 table.add_row(str(key), str(value))
 
-            logger.info(
-                "Complex item %s requires special handling",
-                item["id"],
-                extra={
-                    "renderables": (
-                        Panel(
-                            f"Complex item {item['id']} requires special handling",
-                            border_style="yellow",
-                        ),
-                        table,
-                    )
-                },
+            logger.rich(
+                "INFO",
+                Panel(
+                    f"Complex item {item['id']} requires special handling",
+                    border_style="yellow",
+                ),
+                table,
+                title=f"Complex item {item['id']} requires special handling",
             )
 
         if random.random() < 0.1:
@@ -92,21 +89,17 @@ def worker_entry(item):
 def main():
     init_logger("INFO", log_verbose=2, enqueue=True)
     log_queue = get_log_queue()
+    log_levels = get_log_levels()
     logger = get_logger("processor.main")
 
-    with global_context_configure(
-        group=ctx("DataProcessor", style="green", show_key=True)
-    ):
-        logger.info(
-            "Starting parallel data processing example",
-            extra={
-                "renderables": (
-                    Panel(
-                        "Starting parallel data processing example",
-                        border_style="blue",
-                    ),
-                )
-            },
+    with global_context_configure(group=ctx("DataProcessor", style="green")):
+        logger.rich(
+            "INFO",
+            Panel(
+                "Starting parallel data processing example",
+                border_style="blue",
+            ),
+            title="Starting parallel data processing example",
         )
 
         data = generate_data(20)
@@ -118,7 +111,7 @@ def main():
         for item in data[:5]:
             table.add_row(str(item["id"]), item["content"], str(item["complexity"]))
         table.add_row("...", "...", "...")
-        logger.info("Items to process", extra={"renderables": (table,)})
+        logger.rich("INFO", table, title="Items to process")
 
         start_time = time.time()
         # Pool tasks cannot receive the queue directly under spawn, so configure
@@ -126,7 +119,7 @@ def main():
         with mp.Pool(
             processes=min(4, mp.cpu_count()),
             initializer=init_worker,
-            initargs=(log_queue,),
+            initargs=(log_queue, log_levels),
         ) as pool:
             results = pool.map(worker_entry, data)
 
@@ -158,10 +151,7 @@ def main():
                 str(result["process_id"]),
             )
 
-        logger.info(
-            "Processing summary",
-            extra={"renderables": (results_table, sample_results)},
-        )
+        logger.rich("INFO", results_table, sample_results, title="Processing summary")
 
 
 if __name__ == "__main__":

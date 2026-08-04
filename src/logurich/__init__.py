@@ -1,6 +1,6 @@
 """Public package exports for logurich."""
 
-__version__ = "0.9.3"
+__version__ = "1.0.0b1"
 
 from .console import (
     console,
@@ -10,18 +10,27 @@ from .console import (
     rich_set_console,
     rich_to_str,
 )
-from .core import (
-    LOG_LEVEL_CHOICES,
-    BoundLogger,
+from .context import (
     ContextValue,
-    LogLevel,
-    LogurichLogger,
-    configure_child_logging,
+    clear_context,
     ctx,
-    get_log_queue,
-    get_logger,
     global_context_configure,
     global_context_set,
+    global_context_unset,
+)
+from .core import (
+    CONSOLE_MODE_CHOICES,
+    FILE_MODE_CHOICES,
+    LOG_LEVEL_CHOICES,
+    ConsoleMode,
+    FileMode,
+    LogLevel,
+    LogLevels,
+    LogurichLogger,
+    configure_child_logging,
+    get_log_levels,
+    get_log_queue,
+    get_logger,
     init_logger,
     shutdown_logger,
 )
@@ -30,14 +39,16 @@ from .user_input import timeout, user_input, user_input_with_timeout
 __all__ = [
     "init_logger",
     "get_log_queue",
+    "get_log_levels",
     "configure_child_logging",
     "shutdown_logger",
     "ctx",
     "ContextValue",
-    "BoundLogger",
     "LogurichLogger",
     "global_context_configure",
     "global_context_set",
+    "global_context_unset",
+    "clear_context",
     "console",
     "reset_console_after_fork",
     "rich_configure_console",
@@ -45,7 +56,12 @@ __all__ = [
     "rich_set_console",
     "rich_to_str",
     "LOG_LEVEL_CHOICES",
+    "CONSOLE_MODE_CHOICES",
+    "FILE_MODE_CHOICES",
     "LogLevel",
+    "LogLevels",
+    "ConsoleMode",
+    "FileMode",
     "get_logger",
     "timeout",
     "user_input",

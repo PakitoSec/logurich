@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import getpass
-import logging
 import platform
 import signal
 import sys
@@ -13,7 +12,9 @@ from typing import Any, Union
 
 from rich.console import ConsoleRenderable
 
-logger = logging.getLogger(__name__)
+from .core import get_logger
+
+_logger = get_logger(__name__)
 
 
 class InputValueError(Exception):
@@ -60,9 +61,7 @@ def user_input(
     hide_input: bool = False,
     context: Union[str, ConsoleRenderable] = None,
 ):
-    use_logger = logger
-    if custom_logger is not None:
-        use_logger = custom_logger
+    use_logger = custom_logger if custom_logger is not None else _logger
     str_default = ""
     if default:
         str_default = f" [default={default}]"
@@ -72,10 +71,11 @@ def user_input(
         use_logger.rich("INFO", context, prefix=False)
     while True:
         while True:
-            use_logger.bind(end="").rich(
+            use_logger.rich(
                 "INFO",
                 f"{text}{str_default}{prompt_suffix}",
                 prefix=False,
+                end="",
             )
             value = getpass.getpass("") if hide_input is True else input()
             if value:
@@ -103,7 +103,7 @@ def user_input(
 
 
 def raise_timeout(signum, frame):
-    logger.error("User input timeout ! Exiting...")
+    _logger.error("User input timeout ! Exiting...")
     sys.exit(1)
 
 
