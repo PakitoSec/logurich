@@ -7,7 +7,7 @@ from logurich import (
     ctx,
     get_log_queue,
     get_logger,
-    global_context_configure,
+    global_context,
     init_logger,
 )
 
@@ -38,7 +38,7 @@ def background_thread_step() -> None:
 
 def background_process_step(log_queue: mp.Queue, request_id: str) -> None:
     configure_child_logging(log_queue)
-    with global_context_configure(request_id=ctx(request_id, style="bold cyan")):
+    with global_context(request_id=ctx(request_id, style="bold cyan")):
         process_log.info("Process task started")
         time.sleep(0.03)
         process_log.info("Process task finished")
@@ -64,7 +64,7 @@ async def run_process_step(log_queue: mp.Queue, request_id: str) -> None:
 
 
 async def handle_request(request_id: str, log_queue: mp.Queue) -> None:
-    with global_context_configure(request_id=ctx(request_id, style="bold cyan")):
+    with global_context(request_id=ctx(request_id, style="bold cyan")):
         request_log.info("Request started")
         await fetch_user_profile()
         await asyncio.gather(

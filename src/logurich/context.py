@@ -138,7 +138,7 @@ def get_context() -> dict[str, ContextValue]:
 
 
 @contextlib.contextmanager
-def global_context_configure(**values: Any) -> Iterator[None]:
+def global_context(**values: Any) -> Iterator[None]:
     """Temporarily extend the context of the current execution.
 
     ``ContextVar`` propagation follows Python's normal rules: asyncio tasks
@@ -172,7 +172,7 @@ def global_context_unset(*keys: str) -> None:
     _context_state.set(updated)
 
 
-def clear_context() -> None:
+def global_clear_context() -> None:
     """Clear all context in the current execution."""
 
     _context_state.set({})

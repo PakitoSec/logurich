@@ -45,10 +45,12 @@ and receive no legacy interpretation.
 All context values now display their keys, including values built with `ctx()`,
 which hid the key in 0.9. Pass `ctx(value, show_key=False)` to hide a key, or
 `label=` to rename it; styling a value no longer changes whether its key is
-shown. `None` is now a real value: `bind(key=None)` and
+shown. Rename `global_context_configure(...)` to `global_context(...)` for a
+temporary ambient context, and `clear_context()` to `global_clear_context()`.
+`None` is now a real value: `bind(key=None)` and
 `global_context_set(key=None)` retain the key. Call `unbind("key")` to remove a
 bound value, `global_context_unset("key")` to remove an ambient value, or
-`clear_context()` to clear all ambient values in the current execution.
+`global_clear_context()` to clear all ambient values in the current execution.
 
 Logurich reserves no call keywords of its own and never will: every keyword that
 is not one of stdlib's four (`exc_info`, `stack_info`, `stacklevel`, `extra`) is

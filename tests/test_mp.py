@@ -18,7 +18,7 @@ from logurich import (
     get_log_levels,
     get_log_queue,
     get_logger,
-    global_context_configure,
+    global_context,
     init_logger,
     rich_get_console,
     shutdown_logger,
@@ -33,7 +33,7 @@ def worker_process(queue):
 
 def worker_process_context(queue):
     configure_child_logging(queue)
-    with global_context_configure(task_id=ctx("task-id", show_key=True)):
+    with global_context(task_id=ctx("task-id", show_key=True)):
         logging.getLogger("workers.context").info("Message with context")
 
 
