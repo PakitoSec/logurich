@@ -1,6 +1,6 @@
 """Public package exports for logurich."""
 
-__version__ = "1.0.0b1"
+__version__ = "1.0.0b2"
 
 from .console import (
     console,
@@ -12,9 +12,9 @@ from .console import (
 )
 from .context import (
     ContextValue,
-    clear_context,
     ctx,
-    global_context_configure,
+    global_clear_context,
+    global_context,
     global_context_set,
     global_context_unset,
 )
@@ -45,10 +45,10 @@ __all__ = [
     "ctx",
     "ContextValue",
     "LogurichLogger",
-    "global_context_configure",
+    "global_context",
     "global_context_set",
     "global_context_unset",
-    "clear_context",
+    "global_clear_context",
     "console",
     "reset_console_after_fork",
     "rich_configure_console",

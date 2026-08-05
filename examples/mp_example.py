@@ -11,7 +11,7 @@ from logurich import (
     get_log_levels,
     get_log_queue,
     get_logger,
-    global_context_configure,
+    global_context,
     init_logger,
 )
 
@@ -20,7 +20,7 @@ def worker_function(log_queue, log_levels, worker_id):
     configure_child_logging(log_queue, levels=log_levels)
     logger = get_logger(f"workers.{worker_id}")
 
-    with global_context_configure(worker=ctx(f"Worker-{worker_id}")):
+    with global_context(worker=ctx(f"Worker-{worker_id}")):
         logger.info("Worker %s starting", worker_id)
         logger.debug("Worker %s debug message", worker_id)
 
@@ -61,7 +61,7 @@ def main() -> None:
 
     get_logger("main").info("Multiprocessing example starting")
 
-    with global_context_configure(process=ctx("Main-Process", style="magenta")):
+    with global_context(process=ctx("Main-Process", style="magenta")):
         processes = [
             mp.Process(target=worker_function, args=(log_queue, log_levels, i + 1))
             for i in range(3)

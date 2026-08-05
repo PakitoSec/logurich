@@ -27,10 +27,10 @@ from rich.traceback import Traceback
 from .console import rich_get_console, rich_to_str
 from .context import (
     ContextValue,
-    clear_context,
     ctx,
     get_context,
-    global_context_configure,
+    global_clear_context,
+    global_context,
     normalize_context,
 )
 from .handler import (
@@ -305,7 +305,7 @@ class LogurichLogger(logging.LoggerAdapter):
     def contextualize(self, **values: Any) -> contextlib.AbstractContextManager[None]:
         """Temporarily extend context for the current execution."""
 
-        return global_context_configure(**values)
+        return global_context(**values)
 
     def process(self, msg: Any, kwargs: Any) -> tuple[Any, Any]:
         """Split stdlib options from per-call context."""
@@ -720,7 +720,7 @@ def shutdown_logger() -> None:
             "original_root_level": None,
         }
     )
-    clear_context()
+    global_clear_context()
 
 
 def _ensure_shutdown_atexit_registered() -> None:

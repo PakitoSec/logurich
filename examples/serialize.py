@@ -1,7 +1,7 @@
 from rich.panel import Panel
 from rich.table import Table
 
-from logurich import ctx, get_logger, global_context_configure, init_logger
+from logurich import ctx, get_logger, global_context, init_logger
 
 
 def build_table() -> Table:
@@ -33,7 +33,7 @@ if __name__ == "__main__":
         nested={"key": "value"},
     )
 
-    with global_context_configure(request_id=ctx("req-42")):
+    with global_context(request_id=ctx("req-42")):
         logger.info("Message with scoped context")
 
     logger.rich(

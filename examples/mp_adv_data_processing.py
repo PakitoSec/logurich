@@ -14,7 +14,7 @@ from logurich import (
     get_log_levels,
     get_log_queue,
     get_logger,
-    global_context_configure,
+    global_context,
     global_context_set,
     init_logger,
 )
@@ -92,7 +92,7 @@ def main():
     log_levels = get_log_levels()
     logger = get_logger("processor.main")
 
-    with global_context_configure(group=ctx("DataProcessor", style="green")):
+    with global_context(group=ctx("DataProcessor", style="green")):
         logger.rich(
             "INFO",
             Panel(

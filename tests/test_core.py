@@ -16,10 +16,10 @@ from logurich import (
     CONSOLE_MODE_CHOICES,
     FILE_MODE_CHOICES,
     LogurichLogger,
-    clear_context,
     ctx,
     get_logger,
-    global_context_configure,
+    global_clear_context,
+    global_context,
     global_context_set,
     global_context_unset,
     init_logger,
@@ -172,9 +172,9 @@ def test_context_priority_global_bound_call(enqueue, buffer):
 
 
 def test_nested_context_restores_outer_value(logger, buffer):
-    with global_context_configure(request="outer"):
+    with global_context(request="outer"):
         logger.info("first")
-        with global_context_configure(request="inner"):
+        with global_context(request="inner"):
             logger.info("second")
         logger.info("third")
     logger.info("fourth")
@@ -196,8 +196,8 @@ def test_global_context_set_and_none_are_values(logger, buffer):
 
 def test_context_removal_api_is_public():
     assert logurich.global_context_unset is global_context_unset
-    assert logurich.clear_context is clear_context
-    assert {"global_context_unset", "clear_context"} <= set(logurich.__all__)
+    assert logurich.global_clear_context is global_clear_context
+    assert {"global_context_unset", "global_clear_context"} <= set(logurich.__all__)
 
 
 def test_global_context_unset_removes_only_requested_keys(logger, buffer):
@@ -212,9 +212,9 @@ def test_global_context_unset_removes_only_requested_keys(logger, buffer):
     assert "result=None" in output
 
 
-def test_clear_context_removes_all_ambient_context(logger, buffer):
+def test_global_clear_context_removes_all_ambient_context(logger, buffer):
     global_context_set(request="req-1", tenant="acme")
-    clear_context()
+    global_clear_context()
     logger.info("done")
     shutdown_logger()
 
@@ -493,7 +493,7 @@ def test_init_is_idempotent_and_force_reconfigures(buffer):
 
 
 def test_context_is_isolated_from_new_thread(logger, buffer):
-    with global_context_configure(request="main"):
+    with global_context(request="main"):
         thread = threading.Thread(target=lambda: logger.info("thread"))
         thread.start()
         thread.join()
@@ -510,7 +510,7 @@ def test_context_is_propagated_to_asyncio_tasks(logger, buffer):
         logger.info("async child")
 
     async def run() -> None:
-        with global_context_configure(request="async"):
+        with global_context(request="async"):
             await asyncio.create_task(child())
 
     asyncio.run(run())

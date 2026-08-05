@@ -58,7 +58,7 @@ Every keyword that is not one of stdlib's four (`exc_info`, `stack_info`,
 `LogurichLogger`; the original adapter is never mutated. `None` is a real
 context value. Remove bound values with `unbind()` or `try_unbind()`, remove
 selected ambient values with `global_context_unset()`, or clear all ambient
-values with `clear_context()`.
+values with `global_clear_context()`.
 
 ## Standard-library compatibility
 
