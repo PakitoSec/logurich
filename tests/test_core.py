@@ -447,6 +447,7 @@ def test_json_console_contract(buffer):
     assert payload["record"]["message"] == "Login ok"
     assert payload["record"]["extra"]["user"] == "alice"
     assert payload["record"]["level"] == {"name": "INFO", "no": logging.INFO}
+    assert "renderables" not in payload["record"]
     assert "\x1b[" not in json.dumps(payload)
 
 

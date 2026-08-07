@@ -1,3 +1,4 @@
+import json
 import logging
 import multiprocessing as mp
 import os
@@ -209,6 +210,25 @@ def test_unpickleable_rich_value_falls_back_to_text(buffer):
     output = buffer.getvalue()
     assert "Fallback" in output
     assert "lambda" in output
+
+
+def test_queued_json_keeps_structured_renderables(buffer):
+    table = Table(title="Metrics")
+    table.add_column("Name")
+    table.add_row("requests")
+    init_logger("INFO", console="json", enqueue=True)
+    get_logger("tests.queue-json").rich("INFO", table, title="queued")
+    shutdown_logger()
+
+    payload = json.loads(buffer.getvalue().splitlines()[0])
+    assert payload["record"]["renderables"] == [
+        {
+            "type": "table",
+            "title": "Metrics",
+            "columns": ["Name"],
+            "rows": [["requests"]],
+        }
+    ]
 
 
 def test_plain_record_skips_pickle_validation(monkeypatch):

@@ -1,5 +1,7 @@
 from rich.panel import Panel
+from rich.syntax import Syntax
 from rich.table import Table
+from rich.tree import Tree
 
 from logurich import ctx, get_logger, global_context, init_logger
 
@@ -43,6 +45,10 @@ if __name__ == "__main__":
         title="Rich payload",
         width=72,
     )
+
+    tree = Tree("services")
+    tree.add("api").add("healthy")
+    logger.rich("INFO", tree, Syntax("print('hello')", "python"))
 
     try:
         raise RuntimeError("serialize example failure")

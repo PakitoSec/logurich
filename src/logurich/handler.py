@@ -9,7 +9,7 @@ from importlib.metadata import version as metadata_version
 from logging import Formatter, Handler, LogRecord
 from pathlib import Path
 from time import perf_counter
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 from rich.console import ConsoleRenderable, Group
 from rich.constrain import Constrain
@@ -20,6 +20,7 @@ from rich.table import Table
 from rich.text import Text
 
 from .console import rich_console_renderer, rich_get_console, rich_to_str
+from .serialize import serialize_renderables
 from .struct import logger_state
 
 if TYPE_CHECKING:
@@ -101,7 +102,9 @@ class LogurichRenderer:
             f"{source}{padding} | "
         )
 
-    def format_file(self, record: LogRecord) -> str:
+    def format_file(
+        self, record: LogRecord, *, renderables: Optional[tuple[Any, ...]] = None
+    ) -> str:
         prefix_markup = self.build_prefix(record)
         prefix_plain = _safe_text_from_markup(prefix_markup).plain
         context_markup = "".join(self.build_context(record, is_rich_handler=False))
@@ -112,8 +115,10 @@ class LogurichRenderer:
         exception_text = getattr(record, "formatted_exception", "").rstrip("\n")
         stack_text = getattr(record, "formatted_stack", "").rstrip("\n")
 
+        items = self._renderables(record) if renderables is None else renderables
+
         parts: list[str] = []
-        if message_plain or not self._renderables(record):
+        if message_plain or not items:
             line = f"{prefix_plain}{context_plain}{message_plain}"
             if stack_text:
                 line = f"{line}\n{stack_text}" if line else stack_text
@@ -121,12 +126,11 @@ class LogurichRenderer:
                 line = f"{line}\n{exception_text}" if line else exception_text
             parts.append(line)
 
-        renderables = self._renderables(record)
-        if renderables:
+        if items:
             rendered = rich_console_renderer(
                 prefix_markup,
                 getattr(record, "render_prefix", True),
-                renderables,
+                items,
                 getattr(record, "render_width", None),
             )
             parts.append(
@@ -142,7 +146,10 @@ class LogurichRenderer:
         return "\n".join(part for part in parts if part)
 
     def format_json(self, record: LogRecord) -> str:
-        text = self.format_file(record)
+        renderables = self._renderables(record)
+        text_items = tuple(item for item in renderables if isinstance(item, str))
+        rich_items = tuple(item for item in renderables if not isinstance(item, str))
+        text = self.format_file(record, renderables=text_items)
         end = getattr(record, "end", "\n")
         rendered_text = f"{text}{end}" if text else ""
         extra = self._serialize_extra(record)
@@ -150,14 +157,13 @@ class LogurichRenderer:
         exception_data = getattr(record, "exception_data", None)
         file_path = str(Path(record.pathname))
         elapsed_seconds = perf_counter() - SERIALIZATION_START
-        renderables = self._renderables(record)
         message_value = record.getMessage()
-        if renderables and text:
+        if text_items and text:
             lines = text.splitlines()
             continuation = "\n".join(lines[1:])
             if continuation:
                 message_value = f"{message_value}\n{continuation}"
-        payload = {
+        payload: dict[str, Any] = {
             "text": rendered_text,
             "record": {
                 "elapsed": {
@@ -193,6 +199,8 @@ class LogurichRenderer:
                 },
             },
         }
+        if rich_items:
+            payload["record"]["renderables"] = serialize_renderables(rich_items)
         return json.dumps(payload, default=str, ensure_ascii=False)
 
     def _serialize_extra(self, record: LogRecord) -> dict[str, Any]:
