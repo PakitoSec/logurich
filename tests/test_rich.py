@@ -4,9 +4,14 @@ import logging
 import re
 
 import pytest
+from rich.console import Group
 from rich.logging import RichHandler
 from rich.panel import Panel
+from rich.rule import Rule
+from rich.syntax import Syntax
 from rich.table import Table
+from rich.text import Text
+from rich.tree import Tree
 
 from logurich import LogurichLogger, get_logger, init_logger, shutdown_logger
 
@@ -160,6 +165,127 @@ def test_json_file_uses_newline_framing_when_end_is_empty(tmp_path, buffer):
     assert payloads[1]["text"].endswith("second")
     assert not payloads[0]["text"].endswith("\n")
     assert not payloads[1]["text"].endswith("\n")
+
+
+def test_json_serializes_table_structurally(buffer):
+    init_logger("INFO", console="json", enqueue=False)
+    get_logger("tests.json-table").rich("INFO", build_table(), title="report")
+    shutdown_logger()
+
+    payload = json.loads(buffer.getvalue().splitlines()[0])
+    assert payload["record"]["renderables"] == [
+        {
+            "type": "table",
+            "title": "Metrics",
+            "columns": ["Name", "Value"],
+            "rows": [["requests", "42"]],
+        }
+    ]
+    assert payload["record"]["message"] == "report"
+    assert "┏" not in payload["text"]
+    assert "┏" not in json.dumps(payload)
+
+
+def test_json_serializes_nested_panel(buffer):
+    init_logger("INFO", console="json", enqueue=False)
+    get_logger("tests.json-panel").rich(
+        "INFO", Panel(build_table(), title="wrap", subtitle="sub")
+    )
+    shutdown_logger()
+
+    payload = json.loads(buffer.getvalue().splitlines()[0])
+    assert payload["record"]["renderables"] == [
+        {
+            "type": "panel",
+            "title": "wrap",
+            "subtitle": "sub",
+            "content": {
+                "type": "table",
+                "title": "Metrics",
+                "columns": ["Name", "Value"],
+                "rows": [["requests", "42"]],
+            },
+        }
+    ]
+
+
+def test_json_serializes_tree_syntax_and_group(buffer):
+    tree = Tree("root")
+    tree.add("branch").add("leaf")
+    init_logger("INFO", console="json", enqueue=False)
+    get_logger("tests.json-misc").rich(
+        "INFO",
+        tree,
+        Syntax("print(1)", "python"),
+        Group(Text("a"), Rule("done")),
+    )
+    shutdown_logger()
+
+    renderables = json.loads(buffer.getvalue().splitlines()[0])["record"]["renderables"]
+    assert renderables == [
+        {
+            "type": "tree",
+            "label": "root",
+            "children": [
+                {
+                    "type": "tree",
+                    "label": "branch",
+                    "children": [{"type": "tree", "label": "leaf", "children": []}],
+                }
+            ],
+        },
+        {"type": "syntax", "lexer": "python", "code": "print(1)"},
+        {
+            "type": "group",
+            "items": [
+                {"type": "text", "text": "a"},
+                {"type": "rule", "title": "done"},
+            ],
+        },
+    ]
+
+
+def test_json_falls_back_to_text_and_repr(buffer):
+    class Custom:
+        def __rich_console__(self, console, options):
+            yield Text("custom body")
+
+    marker = object()
+    init_logger("INFO", console="json", enqueue=False)
+    get_logger("tests.json-fallback").rich("INFO", Custom(), marker)
+    shutdown_logger()
+
+    renderables = json.loads(buffer.getvalue().splitlines()[0])["record"]["renderables"]
+    assert renderables[0] == {"type": "text", "text": "custom body"}
+    assert renderables[1] == {"type": "object", "repr": repr(marker)}
+
+
+def test_json_omits_renderables_when_only_text(buffer):
+    init_logger("INFO", console="json", enqueue=False)
+    get_logger("tests.json-text-only").rich("INFO", "just text", prefix=False)
+    shutdown_logger()
+
+    payload = json.loads(buffer.getvalue().splitlines()[0])
+    assert "renderables" not in payload["record"]
+    assert payload["text"] == "just text\n"
+
+
+def test_json_file_serializes_renderables_structurally(tmp_path, buffer):
+    init_logger(
+        "INFO",
+        log_filename="structured.jsonl",
+        log_folder=str(tmp_path),
+        console="plain",
+        file="json",
+        rotation=None,
+        enqueue=False,
+    )
+    get_logger("tests.json-file-table").rich("INFO", build_table())
+    shutdown_logger()
+
+    payload = json.loads((tmp_path / "structured.jsonl").read_text().splitlines()[0])
+    assert payload["record"]["renderables"][0]["type"] == "table"
+    assert "┏" not in json.dumps(payload)
 
 
 def test_rich_stacklevel_points_to_caller(buffer):

@@ -115,8 +115,27 @@ and falls back to the configured mode, so a typo in a shared environment cannot
 break startup. `LOGURICH_EXTRA_*` values continue to be included in JSON
 `record.extra`.
 
-JSON and text-file output render Rich objects without ANSI escape codes. The
-JSON schema keeps the public `text` and `record` structure from Logurich 0.9.
+JSON output never renders Rich objects as ASCII art. Text-file output renders
+them without ANSI escape codes, while JSON serialises them as structured data
+under `record.renderables`, leaving `text` and `record.message` free of borders
+and box drawing characters. The JSON schema otherwise keeps the public `text`
+and `record` structure from Logurich 0.9.
+
+```json
+{
+  "type": "table",
+  "title": "Metrics",
+  "columns": ["Name", "Value"],
+  "rows": [["requests", "42"]]
+}
+```
+
+`Table`, `Panel`, `Tree`, `Syntax`, `Markdown`, `Rule`, `Group` and `Columns`
+have dedicated shapes; `Padding`, `Align` and `Constrain` are unwrapped. Any
+other Rich object degrades to `{"type": "text", "text": ...}` and any
+non-renderable value to `{"type": "object", "repr": ...}`. Strings passed to
+`logger.rich()` are not structured: they stay in `text`. Nesting is capped at
+four levels and tables at 100 rows, with a `"truncated": true` marker.
 
 ## Rich objects
 
@@ -128,7 +147,8 @@ method works after `bind()` and with direct or queued logging.
 For multiprocessing, serialisable Rich values reach the listener unchanged. If
 a renderable cannot be pickled, Logurich explicitly falls back to a plain,
 ANSI-free producer-side rendering; other unpicklable record values produce a
-clear logging error.
+clear logging error. Such a fallback is a plain string, so in JSON output it
+lands in `text` instead of `record.renderables`.
 
 ## Multiprocessing
 

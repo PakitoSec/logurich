@@ -94,6 +94,37 @@ the Rich handler, which stays an explicit `console="rich"` opt-in.
 The Click flag changed from `--logger-rich` to the explicit choice
 `--logger-console auto|rich|plain|json`. The old flag is an unknown option.
 
+## Rich renderables in JSON output
+
+JSON output no longer embeds the ASCII rendering of Rich objects. Both
+`console="json"` and `file="json"` now emit structured data under
+`record.renderables`, and `text` and `record.message` keep only the log line:
+
+```diff
+ {
+-  "text": "2025-01-01 00:00:00.000 | INFO     | report\n# ┏━━━━━━━━━━┳━━━━━━━┓\n# ┃ Name     ┃ Value ┃\n# ┡━━━━━━━━━━╇━━━━━━━┩\n# │ requests │ 42    │\n# └──────────┴───────┘",
++  "text": "2025-01-01 00:00:00.000 | INFO     | report\n",
+   "record": {
+-    "message": "report\n# ┏━━━━━━━━━━┳━━━━━━━┓\n# ┃ Name     ┃ Value ┃..."
++    "message": "report",
++    "renderables": [
++      {
++        "type": "table",
++        "title": "Metrics",
++        "columns": ["Name", "Value"],
++        "rows": [["requests", "42"]]
++      }
++    ]
+   }
+ }
+```
+
+The key is omitted when a record carries no Rich object. Strings passed to
+`logger.rich()` are unaffected and stay in `text`. `console="rich"`,
+`console="plain"` and `file="text"` are unchanged. Update log pipelines that
+grepped rendered tables out of `record.message`; read `record.renderables`
+instead. Its shapes are documented in the README.
+
 ## Imports to find and replace
 
 Search applications for:
@@ -109,4 +140,5 @@ Search applications for:
 - `ctx(...)` calls that relied on the key being hidden by default;
 - identity or `isinstance(..., logging.Logger)` checks on `get_logger()`;
 - `bind(...=None)` calls that previously relied on `None` being ignored;
-- `global_context_set(...=None)` calls that previously removed ambient values.
+- `global_context_set(...=None)` calls that previously removed ambient values;
+- JSON consumers parsing rendered tables or panels out of `record.message`.
