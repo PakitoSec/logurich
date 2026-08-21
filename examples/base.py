@@ -24,10 +24,11 @@ if __name__ == "__main__":
         Panel("Rich panel content", border_style="green"),
         create_rich_table(),
         title="Structured output",
+        width=60,
     )
 
     with logger.contextualize(app=logger.ctx("example", style="yellow")):
-        logger.info("This log has app context")
+        logger.info("This [blue]log[/blue] has app context")
 
     logger.info(
         "This log has per-call context",

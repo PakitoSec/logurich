@@ -1,9 +1,11 @@
+import json
+
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 from rich.tree import Tree
 
-from logurich import ctx, get_logger, global_context, init_logger
+from logurich import ctx, get_logger, global_context, init_logger, serialize_renderables
 
 
 def build_table() -> Table:
@@ -54,3 +56,9 @@ if __name__ == "__main__":
         raise RuntimeError("serialize example failure")
     except RuntimeError:
         logger.exception("Exception payload")
+
+    # The converter behind record.renderables is public and reusable directly.
+    linked = Table(title="Fidelity mode")
+    linked.add_column("Report", justify="center", style="cyan")
+    linked.add_row("[link=https://example.test/42]open[/link]")
+    print(json.dumps(serialize_renderables((linked,), styles=True), indent=2))
