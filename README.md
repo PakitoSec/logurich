@@ -130,12 +130,61 @@ and `record` structure from Logurich 0.9.
 }
 ```
 
-`Table`, `Panel`, `Tree`, `Syntax`, `Markdown`, `Rule`, `Group` and `Columns`
-have dedicated shapes; `Padding`, `Align` and `Constrain` are unwrapped. Any
-other Rich object degrades to `{"type": "text", "text": ...}` and any
-non-renderable value to `{"type": "object", "repr": ...}`. Strings passed to
+`Table`, `Panel`, `Tree`, `Syntax`, `Markdown`, `Rule`, `Layout`, `Group` and
+`Columns` have dedicated shapes; `Padding`, `Align` and `Constrain` are
+unwrapped. Any other Rich object degrades to `{"type": "text", "text": ...}` and
+any non-renderable value to `{"type": "object", "repr": ...}`. Strings passed to
 `logger.rich()` are not structured: they stay in `text`. Nesting is capped at
 four levels and tables at 100 rows, with a `"truncated": true` marker.
+
+The same converter is public, so tools that build reports from Rich objects can
+reuse it instead of re-rendering:
+
+```python
+from logurich import SCHEMA_VERSION, serialize_renderables
+
+payload = serialize_renderables((table,), max_rows=None, styles=True)
+```
+
+`max_depth` and `max_rows` relax the caps (`max_rows=None` keeps every row), and
+`styles=True` switches to fidelity mode: text values become
+`{"text": ..., "spans": [...]}` objects instead of plain strings, where each
+span carries `start`, `end`, `style` and an optional `link`. Fidelity mode also
+adds `justify`, `no_wrap` and per-column `style` to tables, `border_style` and
+alignments to panels, and `align`/`style` to rules. Log output always uses the
+default mode, so enabling styles never changes what handlers emit.
+
+`SCHEMA_VERSION` identifies the payload contract. New keys may be added within a
+version; existing keys are never renamed or removed.
+
+## Premarkup
+
+Premarkup tags transform text *before* Rich parses styling markup. Unknown tags
+are left untouched, so Rich still handles them:
+
+```python
+from logurich import process_premarkup_to_text
+
+process_premarkup_to_text("[defang]http://evil.test/a[/defang]")
+# Text: http[:]//evil[.]test/a
+```
+
+Three actions ship built in: `defang` (neutralise URLs, domains and e-mails),
+`color-obs` (highlight observables) and `truncate-url` (shorten long URLs).
+Tags may combine actions, which then run in priority order:
+`[truncate-url defang]...[/truncate-url defang]`.
+
+Register your own with `register_premarkup(name, handler, priority=...)`; lower
+priorities run first. `unregister_premarkup()` removes one and
+`premarkup_actions()` lists them in execution order.
+
+Premarkup is a standalone utility: it is never applied automatically to log
+records, so it costs nothing on the logging path. `process_premarkup()` returns
+a markup string that must be handed to `Text.from_markup` for its escapes to
+resolve; `process_premarkup_to_text()` does that for you and passes non-string
+inputs through unchanged. Inputs longer than `MAX_PREMARKUP_INPUT` are returned
+as-is, and untrusted content should go through `rich.markup.escape` first, since
+the output is markup.
 
 ## Rich objects
 

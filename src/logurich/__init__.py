@@ -34,6 +34,16 @@ from .core import (
     init_logger,
     shutdown_logger,
 )
+from .premarkup import (
+    MAX_PREMARKUP_INPUT,
+    PremarkupAction,
+    premarkup_actions,
+    process_premarkup,
+    process_premarkup_to_text,
+    register_premarkup,
+    unregister_premarkup,
+)
+from .serialize import SCHEMA_VERSION, serialize_renderables
 from .user_input import timeout, user_input, user_input_with_timeout
 
 __all__ = [
@@ -66,4 +76,13 @@ __all__ = [
     "timeout",
     "user_input",
     "user_input_with_timeout",
+    "SCHEMA_VERSION",
+    "serialize_renderables",
+    "MAX_PREMARKUP_INPUT",
+    "PremarkupAction",
+    "premarkup_actions",
+    "process_premarkup",
+    "process_premarkup_to_text",
+    "register_premarkup",
+    "unregister_premarkup",
 ]
