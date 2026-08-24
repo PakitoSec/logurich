@@ -21,6 +21,12 @@ without sharing bound context, while level, handlers, and propagation stay on
 the shared stdlib logger. `BoundLogger` was removed; all binding operations
 return `LogurichLogger`.
 
+Importing Logurich no longer calls `logging.setLoggerClass()` and no longer
+re-classes existing loggers, so `logging.getLogger("app").rich(...)` now raises
+`AttributeError` instead of silently working as it did in 0.9. Records emitted
+by third-party stdlib loggers are still captured and formatted by Logurich's
+handlers.
+
 ## Context and renderables
 
 Pass Logurich context directly as keywords, and rendering options to `rich()`:
@@ -46,7 +52,7 @@ All context values now display their keys, including values built with `ctx()`,
 which hid the key in 0.9. Pass `ctx(value, show_key=False)` to hide a key, or
 `label=` to rename it; styling a value no longer changes whether its key is
 shown. Rename `global_context_configure(...)` to `global_context(...)` for a
-temporary ambient context, and `clear_context()` to `global_clear_context()`.
+temporary ambient context; `global_context_set()` keeps its name.
 `None` is now a real value: `bind(key=None)` and
 `global_context_set(key=None)` retain the key. Call `unbind("key")` to remove a
 bound value, `global_context_unset("key")` to remove an ambient value, or
@@ -93,6 +99,25 @@ the Rich handler, which stays an explicit `console="rich"` opt-in.
 
 The Click flag changed from `--logger-rich` to the explicit choice
 `--logger-console auto|rich|plain|json`. The old flag is an unknown option.
+The matching parameter renamed too: `logurich.opt_click.LOGGER_PARAM_NAMES` now
+ends with `logger_console`, and `click_logger_init()` takes
+`logger_console: str` instead of `logger_rich: bool`.
+
+## Module layout
+
+Context helpers now live in `logurich.context` instead of `logurich.core`, so
+submodule imports such as `from logurich.core import global_context_set` fail:
+
+```diff
+-from logurich.core import ContextValue, ctx, global_context_set
++from logurich import ContextValue, ctx, global_context_set
+```
+
+The package root re-exports every public name, so importing from `logurich`
+keeps working across releases. `logurich.utils` (and `parse_bool_env`) was
+removed, and two new modules were added: `logurich.premarkup` and
+`logurich.serialize`. Premarkup is opt-in and never applied to log records
+automatically, so 0.9 messages containing bracket tags render unchanged.
 
 ## Rich renderables in JSON output
 
@@ -136,7 +161,8 @@ Search applications for:
 - `LOGURICH_RICH` and `LOGURICH_SERIALIZE`;
 - imports of `BoundLogger`;
 - imports of `logurich.utils` or `parse_bool_env`;
-- `--logger-rich`;
+- imports of `ctx`, `ContextValue`, or `global_context_*` from `logurich.core`;
+- `--logger-rich`, `LOGGER_PARAM_NAMES`, and `click_logger_init(logger_rich=...)`;
 - `ctx(...)` calls that relied on the key being hidden by default;
 - identity or `isinstance(..., logging.Logger)` checks on `get_logger()`;
 - `bind(...=None)` calls that previously relied on `None` being ignored;
