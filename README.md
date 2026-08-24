@@ -25,9 +25,7 @@ logger = get_logger(__name__)
 
 logger.info("Processed %s items", 12, batch="b-42")
 
-request_logger = logger.bind(
-    request_id=logger.ctx("req-42", style="cyan")
-)
+request_logger = logger.bind(request_id=logger.ctx("req-42", style="cyan"))
 request_logger.info("Request completed", duration_ms=17)
 
 with logger.contextualize(user_id="alice"):
@@ -95,8 +93,8 @@ Console and file formats are independent:
 ```python
 init_logger(
     "INFO",
-    console="rich",       # auto | rich | plain | json
-    file="json",          # text | json
+    console="rich",  # auto | rich | plain | json
+    file="json",  # text | json
     log_filename="app.log",
 )
 ```
