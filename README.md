@@ -264,6 +264,13 @@ Logurich registers shutdown hooks for short-lived programs; call
 `shutdown_logger()` when deterministic teardown is needed in tests or before
 reconfiguration.
 
+`init_logger()` takes over the root logger: `clear_handlers=True` (the default)
+drops handlers installed by a host runtime — AWS Lambda, gunicorn, an APM agent
+— so Logurich is the single sink. Pass `clear_handlers=False` to leave them
+attached; they then also receive Logurich records, whose `context`,
+`renderables` and `rich_traceback` attributes carry Rich objects a foreign
+formatter may fail on.
+
 Users upgrading from 0.9 should read the [v1 migration guide](docs/migration-v1.md).
 
 ## Development

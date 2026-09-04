@@ -493,6 +493,63 @@ def test_init_is_idempotent_and_force_reconfigures(buffer):
     assert "now visible" in output
 
 
+def test_clear_handlers_detaches_foreign_handlers():
+    foreign = logging.NullHandler()
+    root = logging.getLogger()
+    root.addHandler(foreign)
+    try:
+        init_logger("INFO", enqueue=False)
+        assert foreign not in root.handlers
+        shutdown_logger()
+    finally:
+        root.removeHandler(foreign)
+
+
+def test_clear_handlers_false_keeps_foreign_handlers():
+    foreign = logging.NullHandler()
+    root = logging.getLogger()
+    root.addHandler(foreign)
+    try:
+        init_logger("INFO", enqueue=False, clear_handlers=False)
+        assert foreign in root.handlers
+        shutdown_logger()
+    finally:
+        root.removeHandler(foreign)
+
+
+def test_clear_handlers_drops_untracked_logurich_handlers(monkeypatch):
+    root = logging.getLogger()
+    init_logger("INFO", enqueue=False)
+    stale = root.handlers[0]
+    monkeypatch.setitem(logger_state, "installed_handlers", ())
+
+    init_logger("INFO", enqueue=False, force=True)
+    assert stale not in root.handlers
+
+    shutdown_logger()
+    assert stale not in root.handlers
+
+
+def test_foreign_handler_sees_no_record_when_cleared():
+    """A foreign formatter must not choke on the Rich objects Logurich attaches."""
+    seen: list[logging.LogRecord] = []
+
+    class Probe(logging.Handler):
+        def emit(self, record):
+            seen.append(record)
+
+    probe = Probe()
+    root = logging.getLogger()
+    root.addHandler(probe)
+    try:
+        init_logger("INFO", enqueue=False)
+        get_logger("tests.foreign").info("hello", request=ctx("REQ-1"))
+        shutdown_logger()
+        assert seen == []
+    finally:
+        root.removeHandler(probe)
+
+
 def test_context_is_isolated_from_new_thread(logger, buffer):
     with global_context(request="main"):
         thread = threading.Thread(target=lambda: logger.info("thread"))
