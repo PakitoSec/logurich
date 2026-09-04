@@ -103,6 +103,22 @@ The matching parameter renamed too: `logurich.opt_click.LOGGER_PARAM_NAMES` now
 ends with `logger_console`, and `click_logger_init()` takes
 `logger_console: str` instead of `logger_rich: bool`.
 
+## Root handler ownership
+
+As in 0.9, `init_logger()` clears the root logger before installing its own
+handlers. 1.0.0 briefly kept foreign handlers attached, which double-wrote every
+record and let a host formatter choke on the Rich objects Logurich attaches to a
+`LogRecord` (`context`, `renderables`, `rich_traceback`) — most visibly under AWS
+Lambda with `AWS_LAMBDA_LOG_FORMAT=JSON`, where the `TypeError` surfaces at the
+`logger.info()` call site.
+
+The behaviour is now explicit: opt out with `clear_handlers=False` when the host
+runtime's handler must keep receiving records.
+
+```python
+init_logger("INFO", clear_handlers=False)
+```
+
 ## Module layout
 
 Context helpers now live in `logurich.context` instead of `logurich.core`, so

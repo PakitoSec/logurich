@@ -589,6 +589,23 @@ def _remove_installed_handlers() -> list[logging.Handler]:
     return handlers
 
 
+def _clear_root_handlers() -> None:
+    """Drop every root handler so Logurich becomes the single sink.
+
+    Handlers Logurich built (they all carry ``_OUTPUT_FILTER``) are closed;
+    foreign ones are only detached, since the host runtime owns their resources
+    — closing them could take down a file descriptor it still writes to.
+    """
+
+    root = logging.getLogger()
+    superseded: list[logging.Handler] = []
+    for handler in list(root.handlers):
+        root.removeHandler(handler)
+        if _OUTPUT_FILTER in handler.filters:
+            superseded.append(handler)
+    _close_handlers(superseded)
+
+
 def _configure_handler(handler: logging.Handler, *, producer: bool) -> None:
     handler.setLevel(logging.NOTSET)
     handler.addFilter(_OUTPUT_FILTER)
@@ -843,11 +860,17 @@ def init_logger(
     rotation: Optional[Union[str, int]] = "12:00",
     retention: Optional[int] = 10,
     force: bool = False,
+    clear_handlers: bool = True,
 ) -> Optional[str]:
     """Configure stdlib logging with independent console and file formats.
 
     ``LOGURICH_OUTPUT``, when set, takes precedence over ``console`` and does
     not affect ``file``.
+
+    ``clear_handlers`` drops every root handler, so Logurich becomes the single
+    sink. Set it to ``False`` to leave handlers installed by a host runtime (AWS
+    Lambda, gunicorn, an APM agent) in place — they then also receive Logurich
+    records, which carry Rich objects a foreign formatter may not handle.
     """
 
     _warn_legacy_environment(os.environ)
@@ -874,6 +897,9 @@ def init_logger(
     # Reject records below every configured threshold before constructing them.
     # _OUTPUT_FILTER still applies the exact per-module level at the handler.
     root.setLevel(_level_floor(min_level, module_levels))
+
+    if clear_handlers:
+        _clear_root_handlers()
 
     logger_state.update(
         {
